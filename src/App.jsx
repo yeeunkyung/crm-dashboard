@@ -284,13 +284,12 @@ ${examples}
     setSending(false);
   };
 
-  // ── AI 에이전트 실행 (Claude Tool Use)
+  // ── AI 에이전트 실행 (Claude Tool Use - 단일 툴 방식)
   const runAgent=useCallback(async()=>{
     setAgentRunning(true);setAgentDone(false);setAgentLogs([]);setAgentResults([]);
 
     const addLog=(icon,text,type='info')=>setAgentLogs(prev=>[...prev,{icon,text,type,time:new Date().toLocaleTimeString()}]);
 
-    // 대상 고객 추출
     const targets = agentTarget==='all'
       ? customers.slice(0,agentLimit)
       : customers.filter(c=>c.groupId===Number(agentTarget)).slice(0,agentLimit);
@@ -300,37 +299,22 @@ ${examples}
     addLog('🚀',`에이전트 시작 — 대상 ${targets.length}명`);
     addLog('🏢',`아파트: ${apt.name} / 청약일: ${apt.date}`);
 
-    // Tool 정의
-    const tools=[
-      {
-        name:'classify_and_match',
-        description:'고객 세그먼트를 확인하고 최적 템플릿을 선택한다',
-        input_schema:{
-          type:'object',
-          properties:{
-            customer_name:{type:'string',description:'고객 이름'},
-            group_id:{type:'number',description:'세그먼트 그룹 번호 1~10'},
-            group_name:{type:'string',description:'세그먼트명'},
-            template_id:{type:'number',description:'선택한 템플릿 ID'},
-            template_title:{type:'string',description:'선택한 템플릿 제목'},
-            reason:{type:'string',description:'이 템플릿을 선택한 이유 (한 줄)'},
-          },
-          required:['customer_name','group_id','group_name','template_id','template_title','reason'],
-        }
-      },
-      {
-        name:'write_message',
-        description:'고객 맞춤 카카오 알림톡 메시지를 작성한다',
-        input_schema:{
-          type:'object',
-          properties:{
-            customer_name:{type:'string'},
-            message:{type:'string',description:'완성된 메시지 (120자 내외, 이모지 1~2개 포함)'},
-          },
-          required:['customer_name','message'],
-        }
-      },
-    ];
+    // 툴 하나로 단순화 — 분석+메시지 한번에
+    const tools=[{
+      name:'process_customer',
+      description:'고객을 분석하고 맞춤 메시지를 한번에 생성한다',
+      input_schema:{
+        type:'object',
+        properties:{
+          customer_name:{type:'string',description:'고객 이름'},
+          group_name:{type:'string',description:'세그먼트명 (예: 그룹3 VIP 즉시 전환 1)'},
+          template_title:{type:'string',description:'선택한 템플릿 제목'},
+          message:{type:'string',description:'완성된 카카오 알림톡 메시지 (이름 포함, 이모지 1~2개, 아파트명·청약일 포함, 120자 내외)'},
+          strategy:{type:'string',description:'이 메시지 전략 한 줄 요약'},
+        },
+        required:['customer_name','group_name','template_title','message','strategy'],
+      }
+    }];
 
     const results=[];
 
@@ -339,97 +323,70 @@ ${examples}
       const g=getGroup(c.groupId);
       const p=prompts[g.id]||DEFAULT_PROMPTS[g.id];
       const recTemplates=(TEMPLATE_MAPPING[g.id]||[]).slice(0,3).map(id=>TEMPLATES.find(t=>t.id===id)).filter(Boolean);
-      const templateList=recTemplates.map(t=>`ID:${t.id} [${t.title}] - ${t.content.slice(0,80)}`).join('\n');
+      const templateList=recTemplates.map(t=>`[${t.title}]: ${t.content.slice(0,100)}`).join('\n');
 
-      addLog('👤',`(${i+1}/${targets.length}) ${c.name} 처리 중... [${g.name}]`);
+      addLog('👤',`(${i+1}/${targets.length}) ${c.name} 분석 중... [${g.short}]`);
 
-      const systemPrompt=`당신은 부동산 청약 CRM AI 에이전트입니다.
-주어진 고객 정보를 분석하고 툴을 순서대로 호출하여 업무를 처리하세요.
+      const prompt=`당신은 부동산 청약 CRM AI 에이전트입니다.
+아래 고객을 분석하고 process_customer 툴을 호출하여 결과를 반환하세요.
 
-규칙:
-1. classify_and_match 툴로 세그먼트 확인 + 최적 템플릿 선택
-2. write_message 툴로 개인화 메시지 작성
-- 메시지: 이름 포함, 이모지 1~2개, ${apt.name} 포함, ${apt.date} 포함, ${p.length}자 내외
-- 말투: ${p.tone} / 스타일: ${p.style}
-${p.banned?`- 금지 표현: ${p.banned}`:''}`;
-
-      const userMsg=`[고객 정보]
+[고객 정보]
 이름: ${c.name} / 나이: ${c.age} / 성별: ${c.gender} / 지역: ${c.region}
-세그먼트: 그룹${c.groupId} ${g.name}
-청약의사: ${c.의사} / 자격: ${c.자격} / 목적: ${c.목적}
+세그먼트: ${g.name} / 청약의사: ${c.의사} / 자격: ${c.자격} / 목적: ${c.목적}
 
-[아파트]
-${apt.name} / ${apt.location} / 분양가: ${apt.price} / 청약일: ${apt.date} / 특징: ${apt.features}
+[현재 분양 아파트]
+아파트명: ${apt.name} / 위치: ${apt.location} / 분양가: ${apt.price}
+청약일: ${apt.date} / 특징: ${apt.features}
 
-[추천 템플릿 후보]
+[이 세그먼트 추천 템플릿]
 ${templateList}
 
-위 순서대로 툴을 호출하여 처리하세요.`;
+[메시지 작성 규칙]
+- 말투: ${p.tone} / 스타일: ${p.style} / 길이: ${p.length}자 내외
+- 고객 이름 반드시 포함
+- 이모지 1~2개
+- 아파트명(${apt.name})과 청약일(${apt.date}) 자연스럽게 포함
+${p.banned?`- 금지 표현: ${p.banned}`:''}
+
+반드시 process_customer 툴을 호출하세요.`;
 
       try{
-        // 1차 호출 — 에이전트가 툴 선택
-        let messages=[{role:'user',content:userMsg}];
-        let finalMessage='';
-        let matchInfo=null;
-        let loopCount=0;
+        const res=await fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,
+            'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+          body:JSON.stringify({
+            model:'claude-sonnet-4-20250514',
+            max_tokens:1000,
+            tools,
+            tool_choice:{type:'any'},  // 반드시 툴 호출하도록 강제
+            messages:[{role:'user',content:prompt}],
+          }),
+        });
+        const data=await res.json();
 
-        while(loopCount<5){
-          loopCount++;
-          const res=await fetch('https://api.anthropic.com/v1/messages',{
-            method:'POST',
-            headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,
-              'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-            body:JSON.stringify({
-              model:'claude-sonnet-4-20250514',
-              max_tokens:1000,
-              system:systemPrompt,
-              tools,
-              messages,
-            }),
-          });
-          const data=await res.json();
+        // tool_use 블록에서 바로 추출
+        const toolUse=data.content?.find(b=>b.type==='tool_use'&&b.name==='process_customer');
 
-          if(data.stop_reason==='end_turn'){
-            // 텍스트 응답으로 끝난 경우
-            const txt=data.content?.find(b=>b.type==='text')?.text||'';
-            if(txt) finalMessage=txt;
-            break;
-          }
-
-          if(data.stop_reason==='tool_use'){
-            const toolUses=data.content.filter(b=>b.type==='tool_use');
-            const toolResults=[];
-
-            for(const tu of toolUses){
-              if(tu.name==='classify_and_match'){
-                matchInfo=tu.input;
-                addLog('🔍',`  → 템플릿 선택: [${tu.input.template_title}] — ${tu.input.reason}`,'success');
-                toolResults.push({type:'tool_result',tool_use_id:tu.id,content:'완료: 세그먼트 확인 및 템플릿 선택됨'});
-              }
-              if(tu.name==='write_message'){
-                finalMessage=tu.input.message;
-                addLog('✍️',`  → 메시지 작성 완료 (${finalMessage.length}자)`,'success');
-                toolResults.push({type:'tool_result',tool_use_id:tu.id,content:'완료: 메시지 작성됨'});
-              }
-            }
-            // 다음 루프를 위해 메시지에 tool_use + tool_result 추가
-            messages=[...messages,{role:'assistant',content:data.content},{role:'user',content:toolResults}];
+        if(toolUse?.input?.message){
+          const {message,template_title,strategy}=toolUse.input;
+          results.push({customer:c,group:g,message,templateTitle:template_title||'AI생성',time:new Date().toLocaleTimeString()});
+          addLog('✅',`  ✓ [${template_title}] — ${strategy||'완료'}`,'success');
+        } else {
+          // 툴 호출 실패 시 텍스트 응답 fallback
+          const txt=data.content?.find(b=>b.type==='text')?.text||'';
+          if(txt){
+            results.push({customer:c,group:g,message:txt,templateTitle:'AI생성',time:new Date().toLocaleTimeString()});
+            addLog('✅',`  ✓ ${c.name}님 완료 (텍스트 방식)`,'success');
           } else {
-            break;
+            addLog('⚠️',`  → ${c.name} 응답 없음 (stop_reason: ${data.stop_reason})`,'error');
           }
         }
-
-        if(finalMessage){
-          results.push({customer:c,group:g,message:finalMessage,templateTitle:matchInfo?.template_title||'AI생성',time:new Date().toLocaleTimeString()});
-          addLog('✅',`  → ${c.name}님 완료!`,'success');
-        }
-
       }catch(e){
         addLog('❌',`  → ${c.name} 오류: ${e.message}`,'error');
       }
 
-      // 각 고객 사이 짧은 딜레이 (API rate limit 방지)
-      if(i<targets.length-1) await new Promise(r=>setTimeout(r,300));
+      if(i<targets.length-1) await new Promise(r=>setTimeout(r,200));
     }
 
     setAgentResults(results);
