@@ -359,11 +359,19 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
             model:'claude-sonnet-4-20250514',
             max_tokens:1000,
             tools,
-            tool_choice:{type:'any'},  // 반드시 툴 호출하도록 강제
+            tool_choice:{type:'any'},
             messages:[{role:'user',content:prompt}],
           }),
         });
+
+        // HTTP 상태 코드 먼저 확인
+        addLog('🔎',`  HTTP ${res.status} ${res.statusText}`,'info');
+
         const data=await res.json();
+
+        // 응답 전체를 로그에 출력 (처음 300자)
+        const rawLog=JSON.stringify(data).slice(0,300);
+        addLog('📦',`  RAW: ${rawLog}`,'info');
 
         // 에러 응답 상세 로깅
         if(data.error){
