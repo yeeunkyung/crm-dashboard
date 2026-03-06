@@ -175,6 +175,14 @@ export default function App(){
   const [tmplSearch,setTmplSearch]=useState('');
   const fileRef=useRef();
 
+  // ── AI 에이전트 상태
+  const [agentRunning,setAgentRunning]=useState(false);
+  const [agentLogs,setAgentLogs]=useState([]);
+  const [agentResults,setAgentResults]=useState([]);
+  const [agentDone,setAgentDone]=useState(false);
+  const [agentTarget,setAgentTarget]=useState('all');
+  const [agentLimit,setAgentLimit]=useState(5);
+
   const getGroup=id=>ALL_GROUPS.find(g=>g.id===id)||ALL_GROUPS[0];
   const groupCounts=Object.fromEntries(ALL_GROUPS.map(g=>[g.id,customers.filter(c=>c.groupId===g.id).length]));
   const totalCount=customers.length;
@@ -276,6 +284,169 @@ ${examples}
     setSending(false);
   };
 
+  // ── AI 에이전트 실행 (Claude Tool Use)
+  const runAgent=useCallback(async()=>{
+    setAgentRunning(true);setAgentDone(false);setAgentLogs([]);setAgentResults([]);
+
+    const addLog=(icon,text,type='info')=>setAgentLogs(prev=>[...prev,{icon,text,type,time:new Date().toLocaleTimeString()}]);
+
+    // 대상 고객 추출
+    const targets = agentTarget==='all'
+      ? customers.slice(0,agentLimit)
+      : customers.filter(c=>c.groupId===Number(agentTarget)).slice(0,agentLimit);
+
+    if(!targets.length){ addLog('⚠️','처리할 고객이 없습니다','error'); setAgentRunning(false); return; }
+
+    addLog('🚀',`에이전트 시작 — 대상 ${targets.length}명`);
+    addLog('🏢',`아파트: ${apt.name} / 청약일: ${apt.date}`);
+
+    // Tool 정의
+    const tools=[
+      {
+        name:'classify_and_match',
+        description:'고객 세그먼트를 확인하고 최적 템플릿을 선택한다',
+        input_schema:{
+          type:'object',
+          properties:{
+            customer_name:{type:'string',description:'고객 이름'},
+            group_id:{type:'number',description:'세그먼트 그룹 번호 1~10'},
+            group_name:{type:'string',description:'세그먼트명'},
+            template_id:{type:'number',description:'선택한 템플릿 ID'},
+            template_title:{type:'string',description:'선택한 템플릿 제목'},
+            reason:{type:'string',description:'이 템플릿을 선택한 이유 (한 줄)'},
+          },
+          required:['customer_name','group_id','group_name','template_id','template_title','reason'],
+        }
+      },
+      {
+        name:'write_message',
+        description:'고객 맞춤 카카오 알림톡 메시지를 작성한다',
+        input_schema:{
+          type:'object',
+          properties:{
+            customer_name:{type:'string'},
+            message:{type:'string',description:'완성된 메시지 (120자 내외, 이모지 1~2개 포함)'},
+          },
+          required:['customer_name','message'],
+        }
+      },
+    ];
+
+    const results=[];
+
+    for(let i=0;i<targets.length;i++){
+      const c=targets[i];
+      const g=getGroup(c.groupId);
+      const p=prompts[g.id]||DEFAULT_PROMPTS[g.id];
+      const recTemplates=(TEMPLATE_MAPPING[g.id]||[]).slice(0,3).map(id=>TEMPLATES.find(t=>t.id===id)).filter(Boolean);
+      const templateList=recTemplates.map(t=>`ID:${t.id} [${t.title}] - ${t.content.slice(0,80)}`).join('\n');
+
+      addLog('👤',`(${i+1}/${targets.length}) ${c.name} 처리 중... [${g.name}]`);
+
+      const systemPrompt=`당신은 부동산 청약 CRM AI 에이전트입니다.
+주어진 고객 정보를 분석하고 툴을 순서대로 호출하여 업무를 처리하세요.
+
+규칙:
+1. classify_and_match 툴로 세그먼트 확인 + 최적 템플릿 선택
+2. write_message 툴로 개인화 메시지 작성
+- 메시지: 이름 포함, 이모지 1~2개, ${apt.name} 포함, ${apt.date} 포함, ${p.length}자 내외
+- 말투: ${p.tone} / 스타일: ${p.style}
+${p.banned?`- 금지 표현: ${p.banned}`:''}`;
+
+      const userMsg=`[고객 정보]
+이름: ${c.name} / 나이: ${c.age} / 성별: ${c.gender} / 지역: ${c.region}
+세그먼트: 그룹${c.groupId} ${g.name}
+청약의사: ${c.의사} / 자격: ${c.자격} / 목적: ${c.목적}
+
+[아파트]
+${apt.name} / ${apt.location} / 분양가: ${apt.price} / 청약일: ${apt.date} / 특징: ${apt.features}
+
+[추천 템플릿 후보]
+${templateList}
+
+위 순서대로 툴을 호출하여 처리하세요.`;
+
+      try{
+        // 1차 호출 — 에이전트가 툴 선택
+        let messages=[{role:'user',content:userMsg}];
+        let finalMessage='';
+        let matchInfo=null;
+        let loopCount=0;
+
+        while(loopCount<5){
+          loopCount++;
+          const res=await fetch('https://api.anthropic.com/v1/messages',{
+            method:'POST',
+            headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,
+              'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+            body:JSON.stringify({
+              model:'claude-sonnet-4-20250514',
+              max_tokens:1000,
+              system:systemPrompt,
+              tools,
+              messages,
+            }),
+          });
+          const data=await res.json();
+
+          if(data.stop_reason==='end_turn'){
+            // 텍스트 응답으로 끝난 경우
+            const txt=data.content?.find(b=>b.type==='text')?.text||'';
+            if(txt) finalMessage=txt;
+            break;
+          }
+
+          if(data.stop_reason==='tool_use'){
+            const toolUses=data.content.filter(b=>b.type==='tool_use');
+            const toolResults=[];
+
+            for(const tu of toolUses){
+              if(tu.name==='classify_and_match'){
+                matchInfo=tu.input;
+                addLog('🔍',`  → 템플릿 선택: [${tu.input.template_title}] — ${tu.input.reason}`,'success');
+                toolResults.push({type:'tool_result',tool_use_id:tu.id,content:'완료: 세그먼트 확인 및 템플릿 선택됨'});
+              }
+              if(tu.name==='write_message'){
+                finalMessage=tu.input.message;
+                addLog('✍️',`  → 메시지 작성 완료 (${finalMessage.length}자)`,'success');
+                toolResults.push({type:'tool_result',tool_use_id:tu.id,content:'완료: 메시지 작성됨'});
+              }
+            }
+            // 다음 루프를 위해 메시지에 tool_use + tool_result 추가
+            messages=[...messages,{role:'assistant',content:data.content},{role:'user',content:toolResults}];
+          } else {
+            break;
+          }
+        }
+
+        if(finalMessage){
+          results.push({customer:c,group:g,message:finalMessage,templateTitle:matchInfo?.template_title||'AI생성',time:new Date().toLocaleTimeString()});
+          addLog('✅',`  → ${c.name}님 완료!`,'success');
+        }
+
+      }catch(e){
+        addLog('❌',`  → ${c.name} 오류: ${e.message}`,'error');
+      }
+
+      // 각 고객 사이 짧은 딜레이 (API rate limit 방지)
+      if(i<targets.length-1) await new Promise(r=>setTimeout(r,300));
+    }
+
+    setAgentResults(results);
+    addLog('🎉',`에이전트 완료! 총 ${results.length}명 메시지 생성됨`,'done');
+    setAgentDone(true);
+    setAgentRunning(false);
+  },[customers,apt,prompts,agentTarget,agentLimit]);
+
+  // 에이전트 결과 전체 발송
+  const sendAllAgentResults=()=>{
+    agentResults.forEach(r=>{
+      setSent(prev=>[{customer:r.customer,message:r.message,group:r.group,apt:apt.name,
+        time:r.time,label:r.templateTitle,simulated:true},...prev]);
+    });
+    setTab('sent');
+  };
+
   const updatePrompt=(f,v)=>{setPrompts(p=>({...p,[editGroup]:{...p[editGroup],[f]:v}}));setPromptSaved(false);};
   const cp=prompts[editGroup]||DEFAULT_PROMPTS[editGroup];
   const filtered=filterGroup?customers.filter(c=>c.groupId===filterGroup):customers;
@@ -287,6 +458,7 @@ ${examples}
     {key:'prompts',label:'✏️ 프롬프트'},
     {key:'apt',label:'🏢 아파트'},
     {key:'send',label:'💬 메시지 발송'},
+    {key:'agent',label:'🤖 AI 에이전트'},
     {key:'sent',label:'📋 발송내역'},
   ];
 
@@ -303,7 +475,7 @@ ${examples}
             <div style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#6366f1,#a855f7)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🏢</div>
             <div>
               <div style={{fontWeight:700,fontSize:14}}>청약 CRM AI 메시지 센터</div>
-              <div style={{fontSize:10,color:'#a5b4fc'}}>Claude AI · 10 세그먼트 · 50개 템플릿 매칭</div>
+              <div style={{fontSize:10,color:'#a5b4fc'}}>Claude AI · 10 세그먼트 · 50개 템플릿 · AI 에이전트</div>
             </div>
           </div>
           <div style={{display:'flex',gap:3}}>
@@ -738,6 +910,154 @@ ${examples}
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* ══ AI 에이전트 ══ */}
+        {tab==='agent'&&(
+          <div style={{maxWidth:900}}>
+            {/* 안내 배너 */}
+            <div style={{background:'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(168,85,247,0.15))',border:'1px solid rgba(99,102,241,0.3)',borderRadius:14,padding:'18px 22px',marginBottom:20}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                <span style={{fontSize:22}}>🤖</span>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:'#a5b4fc'}}>AI 에이전트 자동 실행</div>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:2}}>고객 선택 → 템플릿 매칭 → 메시지 생성을 AI가 자동으로 처리해요</div>
+                </div>
+              </div>
+              <div style={{display:'flex',gap:16,fontSize:11,color:'#64748b'}}>
+                <span>1️⃣ 세그먼트 자동 확인</span>
+                <span>→</span>
+                <span>2️⃣ 최적 템플릿 자동 선택</span>
+                <span>→</span>
+                <span>3️⃣ 개인화 메시지 자동 작성</span>
+                <span>→</span>
+                <span>4️⃣ 발송내역 저장</span>
+              </div>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'300px 1fr',gap:18}}>
+              {/* 설정 패널 */}
+              <div>
+                <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'18px 20px',marginBottom:14}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:14}}>⚙️ 실행 설정</div>
+
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,color:'#64748b',marginBottom:7,fontWeight:500}}>대상 고객</div>
+                    <button onClick={()=>setAgentTarget('all')}
+                      style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'none',cursor:'pointer',marginBottom:5,textAlign:'left',fontSize:12,
+                        background:agentTarget==='all'?'rgba(99,102,241,0.25)':'rgba(255,255,255,0.04)',
+                        color:agentTarget==='all'?'#a5b4fc':'#94a3b8'}}>
+                      👥 전체 고객 ({customers.length}명)
+                    </button>
+                    {ALL_GROUPS.map(g=>{
+                      const cnt=customers.filter(c=>c.groupId===g.id).length;
+                      if(!cnt) return null;
+                      return(
+                        <button key={g.id} onClick={()=>setAgentTarget(String(g.id))}
+                          style={{width:'100%',padding:'6px 12px',borderRadius:7,border:'none',cursor:'pointer',marginBottom:4,textAlign:'left',fontSize:11,
+                            background:agentTarget===String(g.id)?`${g.color}20`:'rgba(255,255,255,0.03)',
+                            color:agentTarget===String(g.id)?g.color:'#64748b',
+                            borderLeft:agentTarget===String(g.id)?`3px solid ${g.color}`:'3px solid transparent'}}>
+                          {g.icon} {g.short} ({cnt}명)
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:11,color:'#64748b',marginBottom:7,fontWeight:500}}>최대 처리 인원 (API 비용 조절)</div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {[3,5,10,20,50].map(n=>(
+                        <button key={n} onClick={()=>setAgentLimit(n)}
+                          style={{padding:'5px 12px',borderRadius:7,border:'none',cursor:'pointer',fontSize:12,
+                            background:agentLimit===n?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.06)',
+                            color:agentLimit===n?'#a5b4fc':'#64748b'}}>
+                          {n}명
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 현재 아파트 */}
+                  <div style={{background:'rgba(99,102,241,0.06)',borderRadius:9,padding:'10px 12px',marginBottom:16,fontSize:11}}>
+                    <div style={{color:'#a5b4fc',fontWeight:600,marginBottom:4}}>📌 현재 아파트</div>
+                    <div style={{color:'#94a3b8'}}>{apt.name}</div>
+                    <div style={{color:'#64748b'}}>{apt.date} · {apt.price}</div>
+                  </div>
+
+                  <button onClick={runAgent} disabled={agentRunning}
+                    style={{width:'100%',padding:'12px',borderRadius:10,border:'none',cursor:agentRunning?'not-allowed':'pointer',
+                      fontSize:13,fontWeight:700,
+                      background:agentRunning?'rgba(99,102,241,0.3)':'linear-gradient(135deg,#6366f1,#a855f7)',
+                      color:'white',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                    {agentRunning?(
+                      <>
+                        <span style={{display:'flex',gap:4}}>
+                          {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:'50%',background:'white',animation:'pulse 1.2s ease-in-out infinite',animationDelay:`${i*0.2}s`,display:'inline-block'}}/>)}
+                        </span>
+                        에이전트 실행 중...
+                      </>
+                    ):'🚀 에이전트 시작'}
+                  </button>
+
+                  {agentDone&&agentResults.length>0&&(
+                    <button onClick={sendAllAgentResults}
+                      style={{width:'100%',padding:'10px',borderRadius:10,border:'none',cursor:'pointer',
+                        fontSize:12,fontWeight:600,marginTop:8,
+                        background:'linear-gradient(135deg,#f59e0b,#d97706)',color:'white'}}>
+                      💬 전체 {agentResults.length}명 발송내역에 저장
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 로그 + 결과 */}
+              <div>
+                {/* 실행 로그 */}
+                <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 18px',marginBottom:14}}>
+                  <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:10}}>
+                    📡 실행 로그
+                    {agentRunning&&<span style={{marginLeft:8,fontSize:10,color:'#f59e0b',animation:'pulse 1s infinite'}}>● 실행 중</span>}
+                    {agentDone&&<span style={{marginLeft:8,fontSize:10,color:'#10b981'}}>✅ 완료</span>}
+                  </div>
+                  <div style={{background:'#0a0e1a',borderRadius:9,padding:'12px 14px',minHeight:180,maxHeight:280,overflowY:'auto',fontFamily:'monospace',fontSize:11}}>
+                    {agentLogs.length===0?(
+                      <div style={{color:'#334155',textAlign:'center',paddingTop:60}}>에이전트 시작 버튼을 누르면 로그가 표시돼요</div>
+                    ):agentLogs.map((log,i)=>(
+                      <div key={i} style={{marginBottom:5,color:log.type==='error'?'#f87171':log.type==='success'?'#10b981':log.type==='done'?'#a5b4fc':'#94a3b8',lineHeight:1.6}}>
+                        <span style={{color:'#475569',marginRight:8}}>{log.time}</span>
+                        <span>{log.icon}</span>
+                        <span style={{marginLeft:5}}>{log.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 생성된 메시지 결과 */}
+                {agentResults.length>0&&(
+                  <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 18px'}}>
+                    <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:12}}>
+                      ✨ 생성된 메시지 ({agentResults.length}건)
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:10,maxHeight:400,overflowY:'auto'}}>
+                      {agentResults.map((r,i)=>(
+                        <div key={i} style={{background:'rgba(16,185,129,0.04)',border:'1px solid rgba(16,185,129,0.15)',borderRadius:11,padding:'12px 14px'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8,flexWrap:'wrap'}}>
+                            <span>{r.group.icon}</span>
+                            <span style={{fontWeight:600,fontSize:12}}>{r.customer.name}</span>
+                            <span style={{fontSize:10,color:r.group.color,background:`${r.group.color}15`,padding:'1px 7px',borderRadius:20}}>{r.group.short}</span>
+                            <span style={{fontSize:10,color:'#64748b',background:'rgba(255,255,255,0.06)',padding:'1px 7px',borderRadius:20}}>📋 {r.templateTitle}</span>
+                            <span style={{fontSize:10,color:'#475569',marginLeft:'auto'}}>{r.time}</span>
+                          </div>
+                          <div style={{fontSize:12,color:'#cbd5e1',background:'#0f172a',padding:'10px 12px',borderRadius:8,lineHeight:1.7,whiteSpace:'pre-line'}}>{r.message}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
