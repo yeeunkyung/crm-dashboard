@@ -365,6 +365,14 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
         });
         const data=await res.json();
 
+        // 에러 응답 상세 로깅
+        if(data.error){
+          addLog('❌',`  API 에러: ${data.error.type} — ${data.error.message}`,'error');
+          continue;
+        }
+
+        addLog('🔎',`  응답 stop_reason: ${data.stop_reason} / 블록수: ${data.content?.length??0}`,'info');
+
         // tool_use 블록에서 바로 추출
         const toolUse=data.content?.find(b=>b.type==='tool_use'&&b.name==='process_customer');
 
