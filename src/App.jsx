@@ -415,7 +415,7 @@ ${templateList}
 - 고객 이름 반드시 포함
 - 이모지 1~2개
 - 아파트명(${apt.name})과 청약일(${apt.date}) 자연스럽게 포함
-${p.banned?`- 금지 표현: ${p.banned}`:''}
+${p.banned?('- 금지 표현: '+p.banned):''}
 
 반드시 process_customer 툴을 호출하세요.`;
 
@@ -1122,6 +1122,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                 </div>
               </div>
             )}
+              </div>
 
             {/* 그룹별 발송 모드 */}
             {sendMode==='group'&&(
@@ -1237,6 +1238,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                 </div>
               </div>
             )}
+              </div>
 
             {/* 개별 발송 모드 */}
             {sendMode==='individual'&&(
@@ -1407,7 +1409,6 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
               })()}
             </div>
           </div>
-            )}
           </div>
         )}
 
@@ -1630,9 +1631,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
           </div>
         )}
       </div>
-      </div>
-  </div>
-  </div>
+    </div>
   </div>
   </div>
   </div>
