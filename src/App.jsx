@@ -152,13 +152,6 @@ function Field({label,value,onChange,placeholder}){
         style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',
           borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
     </div>
-  </div>
-  </div>
-  </div>
-  </div>
-  </div>
-  </div>
-  </div>
   );
 }
 
@@ -637,67 +630,44 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
   const s=(style)=>({...style});
 
   return(
-    <div style={{fontFamily:"'Apple SD Gothic Neo','Malgun Gothic',sans-serif",background:'#0b0f1e',minHeight:'100vh',color:'#e2e8f0',fontSize:14,display:'flex'}}>
+    <div style={{fontFamily:"'Apple SD Gothic Neo','Malgun Gothic',sans-serif",background:'#0b0f1e',minHeight:'100vh',color:'#e2e8f0',fontSize:14}}>
       <style>{`@keyframes pulse{0%,80%,100%{transform:scale(0.7);opacity:0.3}40%{transform:scale(1.1);opacity:1}} *{box-sizing:border-box} textarea,input{font-family:inherit} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}`}</style>
 
-      {/* ── 사이드바 ── */}
-      <div style={{width:200,minHeight:'100vh',background:'#0d1117',borderRight:'1px solid rgba(99,102,241,0.15)',display:'flex',flexDirection:'column',position:'sticky',top:0,height:'100vh',flexShrink:0}}>
-        {/* 로고 */}
-        <div style={{padding:'18px 16px 14px',borderBottom:'1px solid rgba(99,102,241,0.1)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:9}}>
-            <div style={{width:32,height:32,borderRadius:9,background:'linear-gradient(135deg,#6366f1,#a855f7)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>🏢</div>
+      {/* ── 헤더 ── */}
+      <div style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b 60%,#0f172a)',borderBottom:'1px solid rgba(99,102,241,0.25)',padding:'0 24px',position:'sticky',top:0,zIndex:100}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',height:52}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:32,height:32,borderRadius:9,background:'linear-gradient(135deg,#6366f1,#a855f7)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>🏢</div>
             <div>
-              <div style={{fontWeight:700,fontSize:12,lineHeight:1.3}}>청약 CRM</div>
-              <div style={{fontSize:9,color:'#6366f1',marginTop:1}}>AI 메시지 센터</div>
+              <div style={{fontWeight:700,fontSize:13}}>청약 CRM AI 메시지 센터</div>
+              <div style={{fontSize:9,color:'#a5b4fc'}}>Claude AI · 10 세그먼트 · 솔라피 SMS 연동</div>
             </div>
           </div>
-          <div style={{marginTop:10,fontSize:10,color:'#475569'}}>{totalCount.toLocaleString()}명 · {dataSource==='csv'?'CSV':dataSource==='sheet'?'구글시트':'샘플'}</div>
-        </div>
-        {/* 탭 메뉴 */}
-        <nav style={{flex:1,padding:'10px 8px',overflowY:'auto'}}>
-          {TABS.map(t=>(
-            <button key={t.key} onClick={()=>setTab(t.key)}
-              style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:9,border:'none',cursor:'pointer',textAlign:'left',marginBottom:2,
-                background:tab===t.key?'rgba(99,102,241,0.2)':'transparent',
-                borderLeft:tab===t.key?'3px solid #6366f1':'3px solid transparent',
-                color:tab===t.key?'#a5b4fc':'#64748b',fontSize:12,fontWeight:tab===t.key?600:400}}>
-              {t.label}
-            </button>
-          ))}
-        </nav>
-        {/* 상태 */}
-        <div style={{padding:'12px 14px',borderTop:'1px solid rgba(99,102,241,0.1)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
-            <div style={{width:6,height:6,borderRadius:'50%',background:'#10b981',boxShadow:'0 0 5px #10b981'}}/>
-            <span style={{fontSize:10,color:'#10b981'}}>Claude API 연결됨</span>
+          <div style={{display:'flex',gap:2,flexWrap:'wrap',justifyContent:'center'}}>
+            {TABS.map(t=>(
+              <button key={t.key} onClick={()=>setTab(t.key)}
+                style={{padding:'5px 10px',borderRadius:7,border:'none',cursor:'pointer',fontSize:11,fontWeight:500,
+                  background:tab===t.key?'rgba(99,102,241,0.35)':'transparent',
+                  color:tab===t.key?'#a5b4fc':'#94a3b8'}}>{t.label}</button>
+            ))}
           </div>
-          <div style={{fontSize:9,color:'#334155'}}>{templates.length}개 템플릿 로드됨</div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {(tab==='send'||tab==='agent')&&(
+              <div style={{display:'flex',alignItems:'center',gap:6,background:'rgba(255,255,255,0.05)',border:`1px solid ${isAd?'rgba(245,158,11,0.4)':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'4px 10px',cursor:'pointer'}}
+                onClick={()=>setIsAd(v=>!v)}>
+                <div style={{width:26,height:14,borderRadius:10,background:isAd?'#f59e0b':'#334155',position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                  <div style={{position:'absolute',top:2,left:isAd?13:2,width:10,height:10,borderRadius:'50%',background:'white',transition:'left 0.2s'}}/>
+                </div>
+                <span style={{fontSize:10,fontWeight:600,color:isAd?'#f59e0b':'#64748b'}}>{isAd?'(광고)ON':'광고표기'}</span>
+              </div>
+            )}
+            <div style={{width:6,height:6,borderRadius:'50%',background:'#10b981',boxShadow:'0 0 5px #10b981'}}/>
+            <span style={{fontSize:10,color:'#10b981'}}>{totalCount.toLocaleString()}명</span>
+          </div>
         </div>
       </div>
 
-      {/* ── 메인 콘텐츠 ── */}
-      <div style={{flex:1,minHeight:'100vh',overflowY:'auto'}}>
-        {/* 상단 바 */}
-        <div style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b 60%,#0f172a)',borderBottom:'1px solid rgba(99,102,241,0.2)',padding:'0 24px',position:'sticky',top:0,zIndex:50}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',height:50}}>
-            <div style={{fontSize:13,fontWeight:600,color:'#e2e8f0'}}>{TABS.find(t=>t.key===tab)?.label}</div>
-            <div style={{display:'flex',alignItems:'center',gap:10}}>
-              {/* 광고 토글 - 발송 관련 탭에서만 표시 */}
-              {(tab==='send'||tab==='agent')&&(
-                <div style={{display:'flex',alignItems:'center',gap:7,background:'rgba(255,255,255,0.05)',border:`1px solid ${isAd?'rgba(245,158,11,0.4)':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}
-                  onClick={()=>setIsAd(v=>!v)}>
-                  <div style={{width:28,height:15,borderRadius:10,background:isAd?'#f59e0b':'#334155',position:'relative',transition:'background 0.2s',flexShrink:0}}>
-                    <div style={{position:'absolute',top:2,left:isAd?14:2,width:11,height:11,borderRadius:'50%',background:'white',transition:'left 0.2s'}}/>
-                  </div>
-                  <span style={{fontSize:11,fontWeight:600,color:isAd?'#f59e0b':'#64748b'}}>{isAd?'(광고) ON':'광고 표기'}</span>
-                </div>
-              )}
-              <div style={{fontSize:11,color:'#64748b'}}>{apt.name} · {apt.date}</div>
-            </div>
-          </div>
-        </div>
-
-      <div style={{padding:'22px 24px'}}>
+      <div style={{padding:'22px 24px',maxWidth:1400,margin:'0 auto'}}>
         {/* ══ 고객 데이터 ══ */}
         {tab==='data'&&(
           <div style={{maxWidth:760}}>
@@ -1661,6 +1631,12 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
         )}
       </div>
     </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
   </div>
   </div>
   );
