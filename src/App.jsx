@@ -62,6 +62,7 @@ const TEMPLATE_MAPPING = {
   5:[28,26,25,15,48], 6:[44,0,14,22,4],
   7:[35,49,38,24,1],  8:[35,49,13,43,24],
   9:[18,19,20,17,45], 10:[14,0,35,24,22],
+  99:[35,49,0,2,38],
 };
 
 const SEGMENTS = [
@@ -83,6 +84,10 @@ const SEGMENTS = [
       {id:8,name:"그룹8 시니어 주거",short:"시니어",icon:"🏡",color:"#f97316",desc:"조건부 의사 + 실거주/혼합 + 50~60대"},
       {id:9,name:"그룹9 자산 증식",short:"자산증식",icon:"📈",color:"#84cc16",desc:"조건부 의사 + 투자/증여 목적"},
       {id:10,name:"그룹10 잠재 수요",short:"잠재수요",icon:"🎯",color:"#14b8a6",desc:"조건부 의사 + 구매 목적 기타(미정)"},
+    ]},
+  { tier:"테스트", tierLabel:"SMS 테스트", tierColor:"#10b981", tierBg:"rgba(16,185,129,0.08)", tierBorder:"rgba(16,185,129,0.25)",
+    groups:[
+      {id:99,name:"🧪 테스트 그룹",short:"테스트",icon:"🧪",color:"#10b981",desc:"실제 SMS 발송 테스트용 — 본인 번호로 확인"},
     ]},
 ];
 const ALL_GROUPS = SEGMENTS.flatMap(s=>s.groups.map(g=>({...g,tier:s.tier,tierLabel:s.tierLabel,tierColor:s.tierColor})));
@@ -136,6 +141,7 @@ const SAMPLE=[
   {id:3,name:'박도현',age:'20대',gender:'남자',region:'서울 마포구',groupId:7,phone:'01034567890',memo:'',자격:'특별공급(신혼부부)',목적:'실거주',의사:'조건부'},
   {id:4,name:'최수아',age:'50대',gender:'여자',region:'부산 해운대',groupId:8,phone:'01045678901',memo:'',자격:'1순위',목적:'실거주',의사:'조건부'},
   {id:5,name:'정우진',age:'40대',gender:'남자',region:'서울 송파구',groupId:9,phone:'01056789012',memo:'',자격:'1순위',목적:'증여',의사:'조건부'},
+  {id:99,name:'📱 테스트',age:'30대',gender:'남자',region:'테스트',groupId:99,phone:'',memo:'👈 본인 번호 입력 후 테스트',자격:'테스트',목적:'테스트',의사:'테스트'},
 ];
 
 function Field({label,value,onChange,placeholder}){
@@ -1014,6 +1020,37 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
         {/* ══ 메시지 발송 ══ */}
         {tab==='send'&&(
           <div>
+            {/* SMS 테스트 배너 */}
+            {(()=>{
+              const testCustomer=customers.find(c=>c.groupId===99);
+              const [testPhone,setTestPhone]=useState('');
+              return(
+                <div style={{background:'rgba(16,185,129,0.08)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                  <span style={{fontSize:16}}>🧪</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#10b981',marginBottom:2}}>SMS 테스트 모드</div>
+                    <div style={{fontSize:11,color:'#64748b'}}>본인 번호로 실제 문자 발송 테스트 가능해요</div>
+                  </div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <input
+                      value={testPhone} onChange={e=>setTestPhone(e.target.value)}
+                      placeholder="010-0000-0000"
+                      style={{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:8,padding:'6px 12px',color:'#e2e8f0',fontSize:12,outline:'none',width:140}}
+                    />
+                    <button onClick={async()=>{
+                      if(!testPhone){alert('번호를 입력해주세요!');return;}
+                      try{
+                        await sendSMS(testPhone,'[청약 CRM 테스트]\n안녕하세요! 솔라피 SMS 연동 테스트 메시지입니다 ✅\n정상적으로 수신되셨나요?');
+                        alert('✅ 테스트 문자 발송 성공!\n잠시 후 수신 확인해보세요.');
+                      }catch(e){alert('❌ 발송 실패: '+e.message);}
+                    }} style={{background:'linear-gradient(135deg,#10b981,#059669)',border:'none',color:'white',padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>
+                      📱 테스트 발송
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* 발송 모드 선택 */}
             <div style={{display:'flex',gap:8,marginBottom:18}}>
               {[
