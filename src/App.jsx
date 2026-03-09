@@ -288,17 +288,62 @@ ${examples}
     setSelected(c);setAiMsg('');setEditMsg('');setSelTemplate(null);setSendResult(null);setAiMode('template');
   };
 
+  // ── 솔라피 HMAC 인증 헬퍼
+  const makeSolapiAuth=async()=>{
+    const apiKey=import.meta.env.VITE_SOLAPI_API_KEY||'';
+    const apiSecret=import.meta.env.VITE_SOLAPI_API_SECRET||'';
+    const date=new Date().toISOString();
+    const salt=Math.random().toString(36).substring(2,22);
+    const enc=new TextEncoder();
+    const key=await crypto.subtle.importKey('raw',enc.encode(apiSecret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+    const sig=await crypto.subtle.sign('HMAC',key,enc.encode(date+salt));
+    const signature=Array.from(new Uint8Array(sig)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    return {apiKey,date,salt,signature};
+  };
+
+  // ── 솔라피 SMS 실제 발송
+  const sendSMS=async(to,text)=>{
+    const sender=import.meta.env.VITE_SOLAPI_SENDER||'';
+    const {apiKey,date,salt,signature}=await makeSolapiAuth();
+    const res=await fetch('https://api.solapi.com/messages/v4/send',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`,
+      },
+      body:JSON.stringify({
+        message:{
+          to:to.replace(/-/g,''),
+          from:sender,
+          text:text,
+        }
+      }),
+    });
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.errorMessage||data.message||'발송 실패');
+    return data;
+  };
+
   const sendKakao=async()=>{
     if(!editMsg||!selected) return;
     setSending(true);setSendResult(null);
+    const g=getGroup(selected.groupId);
+    const finalMsg=applyAdPrefix(editMsg);
+    const phone=selected.phone||'';
     try{
-      setSendResult({ok:true,msg:`[시뮬레이션] ${selected.name}님께 발송 완료 ✅`});
-      const g=getGroup(selected.groupId);
-      const finalMsg=applyAdPrefix(editMsg);
+      if(phone){
+        await sendSMS(phone,finalMsg);
+        setSendResult({ok:true,msg:`✅ ${selected.name}님 (${phone}) SMS 발송 완료!`});
+      }else{
+        setSendResult({ok:true,msg:`[시뮬레이션] ${selected.name}님 - 번호 없음, 발송내역만 저장`});
+      }
       setSent(prev=>[{customer:selected,message:finalMsg,group:g,apt:apt.name,
-        time:new Date().toLocaleTimeString(),label:selTemplate?selTemplate.title:'AI생성',simulated:true},...prev.slice(0,29)]);
+        time:new Date().toLocaleTimeString(),label:selTemplate?selTemplate.title:'AI생성',
+        simulated:!phone},...prev.slice(0,29)]);
       setEditMsg('');setAiMsg('');setSelected(null);setSelTemplate(null);
-    }catch(e){setSendResult({ok:false,msg:'발송 오류: '+e.message});}
+    }catch(e){
+      setSendResult({ok:false,msg:'❌ 발송 실패: '+e.message});
+    }
     setSending(false);
   };
 
@@ -536,18 +581,31 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
   // ── 그룹/전체 발송
   const sendBulk=async(targetCustomers,label,overrideMsg)=>{
     setBulkSending(true);setBulkResult(null);
-    let count=0;
+    let successCount=0, simCount=0, failCount=0;
     for(const c of targetCustomers){
       const g=getGroup(c.groupId);
       const recIds=(TEMPLATE_MAPPING[g.id]||[]).slice(0,1);
       const tmpl=templates.find(t=>t.id===recIds[0])||TEMPLATES.find(t=>t.id===recIds[0]);
       let msg=overrideMsg||(tmpl?tmpl.content:`[${apt.name}] ${c.name}님, ${apt.date} 청약 일정을 안내드립니다.`);
       msg=applyAdPrefix(msg);
+      const phone=c.phone||'';
+      let simulated=true;
+      try{
+        if(phone){
+          await sendSMS(phone,msg);
+          successCount++;
+          simulated=false;
+        }else{
+          simCount++;
+        }
+      }catch(e){
+        failCount++;
+      }
       setSent(prev=>[{customer:c,message:msg,group:g,apt:apt.name,
-        time:new Date().toLocaleTimeString(),label:overrideMsg?'직접입력':(tmpl?tmpl.title:'기본템플릿'),simulated:true},...prev]);
-      count++;
+        time:new Date().toLocaleTimeString(),label:overrideMsg?'직접입력':(tmpl?tmpl.title:'기본템플릿'),simulated},...prev]);
     }
-    setBulkResult({ok:true,msg:`✅ ${label} ${count}명 발송 완료 (시뮬레이션)`});
+    const msg2=`✅ ${label} 완료 — 실제발송 ${successCount}명 / 번호없음 ${simCount}명${failCount>0?' / 실패 '+failCount+'명':''}`;
+    setBulkResult({ok:true,msg:msg2});
     setBulkSending(false);
   };
 
