@@ -152,9 +152,7 @@ function Field({label,value,onChange,placeholder}){
 export default function App(){
   const [tab,setTab]=useState('data');
   const [apt,setApt]=useState(DEFAULT_APT);
-  const [aptSaved,setAptSaved]=useState(true);
   const [prompts,setPrompts]=useState(DEFAULT_PROMPTS);
-  const [promptSaved,setPromptSaved]=useState(true);
   const [editGroup,setEditGroup]=useState(3);
   const [customers,setCustomers]=useState(SAMPLE);
   const [dataSource,setDataSource]=useState('sample');
@@ -174,6 +172,7 @@ export default function App(){
   const [filterGroup,setFilterGroup]=useState(null);
   const [tmplSearch,setTmplSearch]=useState('');
   const fileRef=useRef();
+  const tmplFileRef=useRef();
 
   // ── AI 에이전트 상태
   const [agentRunning,setAgentRunning]=useState(false);
@@ -182,6 +181,24 @@ export default function App(){
   const [agentDone,setAgentDone]=useState(false);
   const [agentTarget,setAgentTarget]=useState('all');
   const [agentLimit,setAgentLimit]=useState(5);
+
+  // ── 템플릿 관리 상태
+  const [templates,setTemplates]=useState(TEMPLATES);
+  const [tmplSheetUrl,setTmplSheetUrl]=useState('');
+  const [tmplSheetLoading,setTmplSheetLoading]=useState(false);
+  const [tmplSheetError,setTmplSheetError]=useState('');
+  const [tmplSource,setTmplSource]=useState('default'); // 'default' | 'sheet' | 'csv'
+  const [tmplSaveStatus,setTmplSaveStatus]=useState('idle'); // 'idle'|'saving'|'saved'|'error'
+
+  // ── 저장 상태 (개선)
+  const [aptSaveStatus,setAptSaveStatus]=useState('saved'); // 'saved'|'saving'|'unsaved'
+  const [promptSaveStatus,setPromptSaveStatus]=useState('saved');
+
+  // ── 그룹 발송 상태
+  const [sendMode,setSendMode]=useState('individual'); // 'individual'|'group'|'all'
+  const [bulkSending,setBulkSending]=useState(false);
+  const [bulkResult,setBulkResult]=useState(null);
+  const [bulkGroup,setBulkGroup]=useState(null);
 
   const getGroup=id=>ALL_GROUPS.find(g=>g.id===id)||ALL_GROUPS[0];
   const groupCounts=Object.fromEntries(ALL_GROUPS.map(g=>[g.id,customers.filter(c=>c.groupId===g.id).length]));
@@ -364,22 +381,12 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
           }),
         });
 
-        // HTTP 상태 코드 먼저 확인
-        addLog('🔎',`  HTTP ${res.status} ${res.statusText}`,'info');
-
         const data=await res.json();
 
-        // 응답 전체를 로그에 출력 (처음 300자)
-        const rawLog=JSON.stringify(data).slice(0,300);
-        addLog('📦',`  RAW: ${rawLog}`,'info');
-
-        // 에러 응답 상세 로깅
         if(data.error){
           addLog('❌',`  API 에러: ${data.error.type} — ${data.error.message}`,'error');
           continue;
         }
-
-        addLog('🔎',`  응답 stop_reason: ${data.stop_reason} / 블록수: ${data.content?.length??0}`,'info');
 
         // tool_use 블록에서 바로 추출
         const toolUse=data.content?.find(b=>b.type==='tool_use'&&b.name==='process_customer');
@@ -420,16 +427,101 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
     setTab('sent');
   };
 
-  const updatePrompt=(f,v)=>{setPrompts(p=>({...p,[editGroup]:{...p[editGroup],[f]:v}}));setPromptSaved(false);};
+  const updatePrompt=(f,v)=>{setPrompts(p=>({...p,[editGroup]:{...p[editGroup],[f]:v}}));setPromptSaveStatus('unsaved');};
   const cp=prompts[editGroup]||DEFAULT_PROMPTS[editGroup];
   const filtered=filterGroup?customers.filter(c=>c.groupId===filterGroup):customers;
-  const searchedTemplates=tmplSearch?TEMPLATES.filter(t=>t.title.includes(tmplSearch)||t.content.includes(tmplSearch)):TEMPLATES;
+  const searchedTemplates=tmplSearch?templates.filter(t=>t.title.includes(tmplSearch)||t.content.includes(tmplSearch)):templates;
+
+  // ── 저장 핸들러 (상태 표시 포함)
+  const saveApt=()=>{
+    setAptSaveStatus('saving');
+    setTimeout(()=>setAptSaveStatus('saved'),600);
+  };
+  const savePrompt=()=>{
+    setPromptSaveStatus('saving');
+    setTimeout(()=>setPromptSaveStatus('saved'),600);
+  };
+
+  // ── 저장 상태 라벨
+  const SaveBadge=({status})=>{
+    const map={
+      saved:{bg:'rgba(16,185,129,0.15)',color:'#10b981',text:'✅ 저장완료'},
+      saving:{bg:'rgba(99,102,241,0.15)',color:'#a5b4fc',text:'⏳ 저장 중...'},
+      unsaved:{bg:'rgba(245,158,11,0.15)',color:'#f59e0b',text:'● 미저장'},
+      error:{bg:'rgba(248,113,113,0.15)',color:'#f87171',text:'❌ 저장실패'},
+      idle:{bg:'rgba(100,116,139,0.15)',color:'#64748b',text:'— 대기 중'},
+    };
+    const s=map[status]||map.idle;
+    return <div style={{fontSize:10,padding:'3px 9px',borderRadius:20,background:s.bg,color:s.color}}>{s.text}</div>;
+  };
+
+  // ── 템플릿 구글시트 로드
+  const loadTmplSheet=async()=>{
+    if(!tmplSheetUrl){setTmplSheetError('URL을 입력해주세요.');return;}
+    setTmplSheetLoading(true);setTmplSheetError('');setTmplSaveStatus('saving');
+    try{
+      const match=tmplSheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if(!match){setTmplSheetError('올바른 구글 시트 URL이 아닙니다.');setTmplSheetLoading(false);setTmplSaveStatus('error');return;}
+      if(!GSHEET_API_KEY){setTmplSheetError('VITE_GSHEET_API_KEY 환경변수를 설정해주세요.');setTmplSheetLoading(false);setTmplSaveStatus('error');return;}
+      const url=`https://sheets.googleapis.com/v4/spreadsheets/${match[1]}/values/A1:Z200?key=${GSHEET_API_KEY}`;
+      const res=await fetch(url); const data=await res.json();
+      if(!data.values||data.values.length<2){setTmplSheetError('시트에 데이터가 없습니다.');setTmplSheetLoading(false);setTmplSaveStatus('error');return;}
+      const headers=data.values[0].map(h=>h.trim());
+      const rows=data.values.slice(1).map((row,idx)=>{
+        const obj={}; headers.forEach((h,i)=>{obj[h]=row[i]||'';});
+        return{
+          id:idx,
+          title:obj['템플릿 제목']||obj['title']||`템플릿${idx+1}`,
+          content:obj['친구톡 내용']||obj['대체문자 내용']||obj['content']||'',
+        };
+      }).filter(t=>t.title&&t.content);
+      setTemplates(rows);setTmplSource('sheet');setTmplSaveStatus('saved');
+    }catch(e){setTmplSheetError('연동 실패: '+e.message);setTmplSaveStatus('error');}
+    setTmplSheetLoading(false);
+  };
+
+  // ── 템플릿 CSV 로드
+  const handleTmplCSV=file=>{
+    if(!file) return; setTmplSheetError('');setTmplSaveStatus('saving');
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const parsed=parseCSV(e.target.result);
+        if(!parsed.length){setTmplSheetError('데이터를 읽을 수 없어요.');setTmplSaveStatus('error');return;}
+        const rows=parsed.map((row,idx)=>({
+          id:idx,
+          title:row['템플릿 제목']||row['title']||`템플릿${idx+1}`,
+          content:row['친구톡 내용']||row['대체문자 내용']||row['content']||'',
+        })).filter(t=>t.title&&t.content);
+        setTemplates(rows);setTmplSource('csv');setTmplSaveStatus('saved');
+      }catch(err){setTmplSheetError('파일 오류: '+err.message);setTmplSaveStatus('error');}
+    };
+    reader.readAsText(file,'UTF-8');
+  };
+
+  // ── 그룹/전체 발송
+  const sendBulk=async(targetCustomers,label)=>{
+    setBulkSending(true);setBulkResult(null);
+    let count=0;
+    for(const c of targetCustomers){
+      const g=getGroup(c.groupId);
+      const recIds=(TEMPLATE_MAPPING[g.id]||[]).slice(0,1);
+      const tmpl=templates.find(t=>t.id===recIds[0]);
+      const msg=tmpl?tmpl.content:`[${apt.name}] ${c.name}님, ${apt.date} 청약 일정을 안내드립니다.`;
+      setSent(prev=>[{customer:c,message:msg,group:g,apt:apt.name,
+        time:new Date().toLocaleTimeString(),label:tmpl?tmpl.title:'기본템플릿',simulated:true},...prev]);
+      count++;
+    }
+    setBulkResult({ok:true,msg:`✅ ${label} ${count}명 발송 완료 (시뮬레이션)`});
+    setBulkSending(false);
+  };
 
   const TABS=[
     {key:'data',label:'📂 고객데이터'},
     {key:'overview',label:'📊 세그먼트'},
     {key:'prompts',label:'✏️ 프롬프트'},
     {key:'apt',label:'🏢 아파트'},
+    {key:'templates',label:'📝 템플릿 관리'},
     {key:'send',label:'💬 메시지 발송'},
     {key:'agent',label:'🤖 AI 에이전트'},
     {key:'sent',label:'📋 발송내역'},
@@ -635,7 +727,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                         <div style={{fontSize:10,color:'#64748b',marginTop:2}}>{g.desc} · {groupCounts[g.id]||0}명</div>
                       </div>
                     </div>
-                    <div style={{fontSize:10,padding:'3px 9px',borderRadius:20,background:promptSaved?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)',color:promptSaved?'#10b981':'#f59e0b'}}>{promptSaved?'✅ 저장됨':'● 미저장'}</div>
+                    <div style={{fontSize:10,padding:'3px 9px',borderRadius:20,background:promptSaveStatus==='saved'?'rgba(16,185,129,0.15)':promptSaveStatus==='saving'?'rgba(99,102,241,0.15)':'rgba(245,158,11,0.15)',color:promptSaveStatus==='saved'?'#10b981':promptSaveStatus==='saving'?'#a5b4fc':'#f59e0b'}}>{promptSaveStatus==='saved'?'✅ 저장완료':promptSaveStatus==='saving'?'⏳ 저장 중...':'● 미저장'}</div>
                   </div>
                   <div style={{marginBottom:16,background:'rgba(99,102,241,0.05)',borderRadius:9,padding:'10px 14px'}}>
                     <div style={{fontSize:11,color:'#a5b4fc',fontWeight:600,marginBottom:6}}>📋 이 세그먼트 추천 템플릿</div>
@@ -682,9 +774,9 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                     <input value={cp.banned} onChange={e=>updatePrompt('banned',e.target.value)} placeholder="예: 저렴한, 싼"
                       style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:12,outline:'none'}}/>
                   </div>
-                  <button onClick={()=>setPromptSaved(true)}
-                    style={{width:'100%',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',color:'white',padding:'10px',borderRadius:9,cursor:'pointer',fontSize:13,fontWeight:600}}>
-                    💾 저장
+                  <button onClick={savePrompt}
+                    style={{width:'100%',background:promptSaveStatus==='saving'?'rgba(99,102,241,0.5)':'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',color:'white',padding:'10px',borderRadius:9,cursor:'pointer',fontSize:13,fontWeight:600}}>
+                    {promptSaveStatus==='saving'?'⏳ 저장 중...':promptSaveStatus==='saved'?'✅ 저장완료':'💾 저장'}
                   </button>
                 </div>
               );
@@ -701,24 +793,193 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                   <div style={{fontSize:15,fontWeight:700}}>🏢 현재 분양 아파트 정보</div>
                   <div style={{fontSize:11,color:'#64748b',marginTop:3}}>여기 입력한 정보가 모든 AI 메시지에 자동 반영됩니다</div>
                 </div>
-                <div style={{fontSize:10,padding:'3px 9px',borderRadius:20,background:aptSaved?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)',color:aptSaved?'#10b981':'#f59e0b'}}>{aptSaved?'✅ 저장됨':'● 미저장'}</div>
+                <div style={{fontSize:10,padding:'3px 9px',borderRadius:20,background:aptSaveStatus==='saved'?'rgba(16,185,129,0.15)':aptSaveStatus==='saving'?'rgba(99,102,241,0.15)':'rgba(245,158,11,0.15)',color:aptSaveStatus==='saved'?'#10b981':aptSaveStatus==='saving'?'#a5b4fc':'#f59e0b'}}>{aptSaveStatus==='saved'?'✅ 저장완료':aptSaveStatus==='saving'?'⏳ 저장 중...':'● 미저장'}</div>
               </div>
               {[['아파트명 *','name','예: 래미안 원베일리 2차'],['위치 *','location','예: 서울 서초구 반포동'],
                 ['청약일 *','date','예: 2026년 4월 15일'],['분양가','price','예: 12억~18억'],
                 ['주요 특징','features','예: 한강뷰, 초품아'],['공급 세대','supply','예: 일반공급 320세대'],
                 ['문의 연락처','contact','예: 02-1234-5678']].map(([label,key,ph])=>(
-                <Field key={key} label={label} value={apt[key]} placeholder={ph} onChange={v=>{setApt(p=>({...p,[key]:v}));setAptSaved(false);}}/>
+                <Field key={key} label={label} value={apt[key]} placeholder={ph} onChange={v=>{setApt(p=>({...p,[key]:v}));setAptSaveStatus('unsaved');}}/>
               ))}
-              <button onClick={()=>setAptSaved(true)}
-                style={{width:'100%',marginTop:6,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',color:'white',padding:'11px',borderRadius:10,cursor:'pointer',fontSize:13,fontWeight:600}}>
-                💾 저장하고 메시지에 반영하기
+              <button onClick={saveApt}
+                style={{width:'100%',marginTop:6,background:aptSaveStatus==='saving'?'rgba(99,102,241,0.5)':'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',color:'white',padding:'11px',borderRadius:10,cursor:'pointer',fontSize:13,fontWeight:600}}>
+                {aptSaveStatus==='saving'?'⏳ 저장 중...':aptSaveStatus==='saved'?'✅ 저장완료':'💾 저장하고 메시지에 반영하기'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 템플릿 관리 ══ */}
+        {tab==='templates'&&(
+          <div style={{maxWidth:900}}>
+            {/* 현황 배너 */}
+            <div style={{background:'rgba(99,102,241,0.06)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:12,padding:'12px 18px',marginBottom:18,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div>
+                <span style={{color:'#a5b4fc',fontWeight:600}}>현재 {templates.length}개 템플릿 로드됨</span>
+                <span style={{color:'#64748b',marginLeft:10,fontSize:12}}>{tmplSource==='sheet'?'🟢 구글 시트':tmplSource==='csv'?'📄 CSV':'📋 기본 템플릿'}</span>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <div style={{fontSize:10,padding:'3px 9px',borderRadius:20,background:tmplSaveStatus==='saved'?'rgba(16,185,129,0.15)':tmplSaveStatus==='saving'?'rgba(99,102,241,0.15)':tmplSaveStatus==='error'?'rgba(248,113,113,0.15)':'rgba(100,116,139,0.15)',color:tmplSaveStatus==='saved'?'#10b981':tmplSaveStatus==='saving'?'#a5b4fc':tmplSaveStatus==='error'?'#f87171':'#64748b'}}>{tmplSaveStatus==='saved'?'✅ 불러오기 완료':tmplSaveStatus==='saving'?'⏳ 불러오는 중...':tmplSaveStatus==='error'?'❌ 불러오기 실패':'— 기본값 사용 중'}</div>
+                {tmplSource!=='default'&&<button onClick={()=>{setTemplates(TEMPLATES);setTmplSource('default');setTmplSaveStatus('idle');}} style={{background:'none',border:'1px solid rgba(255,255,255,0.1)',color:'#64748b',padding:'4px 12px',borderRadius:7,cursor:'pointer',fontSize:11}}>기본으로 초기화</button>}
+              </div>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:18}}>
+              {/* 구글 시트 연동 */}
+              <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'20px 22px'}}>
+                <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>🟢 구글 시트로 업데이트</div>
+                <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>팀원이 시트를 수정하면 버튼 클릭으로 바로 반영돼요</div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..."
+                    style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:11,outline:'none'}}/>
+                  <button onClick={loadTmplSheet} disabled={tmplSheetLoading}
+                    style={{background:'linear-gradient(135deg,#10b981,#059669)',border:'none',color:'white',padding:'8px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>
+                    {tmplSheetLoading?'로딩 중...':'🔄 불러오기'}
+                  </button>
+                </div>
+                {tmplSheetError&&<div style={{color:'#f87171',fontSize:11,padding:'7px 12px',background:'rgba(248,113,113,0.1)',borderRadius:7,marginBottom:8}}>⚠️ {tmplSheetError}</div>}
+                <div style={{background:'rgba(16,185,129,0.06)',border:'1px solid rgba(16,185,129,0.15)',borderRadius:9,padding:'10px 14px'}}>
+                  <div style={{fontSize:11,color:'#10b981',fontWeight:600,marginBottom:4}}>구글 시트 컬럼 형식</div>
+                  <div style={{fontSize:11,color:'#64748b',lineHeight:1.8}}>
+                    A열: <b style={{color:'#94a3b8'}}>템플릿 제목</b><br/>
+                    B열: <b style={{color:'#94a3b8'}}>친구톡 내용</b> (또는 대체문자 내용)<br/>
+                    1행은 헤더 (컬럼명) 입력
+                  </div>
+                </div>
+              </div>
+
+              {/* CSV 업로드 */}
+              <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'20px 22px'}}
+                onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f?.name.endsWith('.csv'))handleTmplCSV(f);}}>
+                <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>📄 CSV 파일로 업데이트</div>
+                <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>템플릿 CSV를 업로드하면 전체 교체돼요</div>
+                <div style={{border:'2px dashed rgba(99,102,241,0.3)',borderRadius:12,padding:'24px 20px',textAlign:'center',background:tmplSource==='csv'?'rgba(16,185,129,0.04)':'rgba(99,102,241,0.03)'}}>
+                  {tmplSource==='csv'?(
+                    <div>
+                      <div style={{fontSize:24,marginBottom:6}}>✅</div>
+                      <div style={{color:'#10b981',fontWeight:600,fontSize:12,marginBottom:4}}>{templates.length}개 템플릿 로드 완료</div>
+                      <button onClick={()=>tmplFileRef.current.click()} style={{background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.3)',color:'#a5b4fc',padding:'5px 14px',borderRadius:7,cursor:'pointer',fontSize:11}}>다른 파일로 교체</button>
+                    </div>
+                  ):(
+                    <div>
+                      <div style={{fontSize:26,marginBottom:8}}>📂</div>
+                      <button onClick={()=>tmplFileRef.current.click()} style={{background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',padding:'7px 18px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:500}}>📁 파일 선택</button>
+                    </div>
+                  )}
+                  <input ref={tmplFileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleTmplCSV(e.target.files[0])}/>
+                </div>
+              </div>
+            </div>
+
+            {/* 현재 템플릿 목록 */}
+            <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 20px'}}>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:12,color:'#94a3b8'}}>현재 적용된 템플릿 목록 ({templates.length}개)</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:400,overflowY:'auto'}}>
+                {templates.map((t,i)=>(
+                  <div key={t.id} style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:9,padding:'10px 14px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                      <span style={{fontSize:10,color:'#475569',background:'rgba(255,255,255,0.06)',padding:'1px 7px',borderRadius:10}}>#{i}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:'#cbd5e1'}}>{t.title}</span>
+                    </div>
+                    <div style={{fontSize:11,color:'#475569',lineHeight:1.6}}>{t.content.slice(0,100)}{t.content.length>100?'...':''}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* ══ 메시지 발송 ══ */}
         {tab==='send'&&(
+          <div>
+            {/* 발송 모드 선택 */}
+            <div style={{display:'flex',gap:8,marginBottom:18}}>
+              {[
+                {key:'individual',label:'👤 개별 발송',desc:'고객 1명씩 선택'},
+                {key:'group',label:'👥 그룹별 발송',desc:'세그먼트 단위 일괄'},
+                {key:'all',label:'📢 전체 발송',desc:`전체 ${customers.length}명`},
+              ].map(m=>(
+                <button key={m.key} onClick={()=>{setSendMode(m.key);setBulkResult(null);}}
+                  style={{flex:1,padding:'12px 16px',borderRadius:11,border:'none',cursor:'pointer',textAlign:'left',
+                    background:sendMode===m.key?'rgba(99,102,241,0.2)':'rgba(255,255,255,0.04)',
+                    borderTop:sendMode===m.key?'2px solid #6366f1':'2px solid transparent'}}>
+                  <div style={{fontSize:13,fontWeight:700,color:sendMode===m.key?'#a5b4fc':'#94a3b8',marginBottom:2}}>{m.label}</div>
+                  <div style={{fontSize:10,color:'#475569'}}>{m.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* 전체 발송 모드 */}
+            {sendMode==='all'&&(
+              <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'22px 24px',maxWidth:700}}>
+                <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>📢 전체 고객 발송</div>
+                <div style={{fontSize:12,color:'#64748b',marginBottom:18}}>세그먼트별 추천 템플릿 1순위로 자동 발송됩니다 (시뮬레이션)</div>
+                <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:9,padding:'10px 14px',marginBottom:18}}>
+                  <div style={{fontSize:11,color:'#f59e0b',fontWeight:600,marginBottom:4}}>⚠️ 주의</div>
+                  <div style={{fontSize:11,color:'#94a3b8'}}>전체 {customers.length.toLocaleString()}명에게 발송됩니다. 실제 발송 연동 시 대량 비용이 발생할 수 있어요.</div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginBottom:18}}>
+                  {ALL_GROUPS.map(g=>{const cnt=groupCounts[g.id]||0;return cnt>0?(
+                    <div key={g.id} style={{background:`${g.color}10`,border:`1px solid ${g.color}25`,borderRadius:9,padding:'8px 10px',textAlign:'center'}}>
+                      <div style={{fontSize:16}}>{g.icon}</div>
+                      <div style={{fontSize:9,color:g.color,fontWeight:600,marginTop:3}}>{g.short}</div>
+                      <div style={{fontSize:11,color:'#94a3b8',fontWeight:700}}>{cnt.toLocaleString()}명</div>
+                    </div>
+                  ):null;})}
+                </div>
+                {bulkResult&&<div style={{padding:'10px 14px',borderRadius:9,marginBottom:14,background:bulkResult.ok?'rgba(16,185,129,0.1)':'rgba(248,113,113,0.1)',color:bulkResult.ok?'#10b981':'#f87171',fontSize:12}}>{bulkResult.msg}</div>}
+                <button onClick={()=>sendBulk(customers,'전체')} disabled={bulkSending}
+                  style={{width:'100%',padding:'13px',borderRadius:11,border:'none',cursor:bulkSending?'not-allowed':'pointer',fontSize:14,fontWeight:700,
+                    background:bulkSending?'rgba(99,102,241,0.3)':'linear-gradient(135deg,#f59e0b,#d97706)',color:'white'}}>
+                  {bulkSending?'발송 중...':'📢 전체 '+customers.length.toLocaleString()+'명 발송 (시뮬레이션)'}
+                </button>
+              </div>
+            )}
+
+            {/* 그룹별 발송 모드 */}
+            {sendMode==='group'&&(
+              <div style={{maxWidth:800}}>
+                <div style={{fontSize:13,color:'#94a3b8',marginBottom:14}}>발송할 세그먼트를 선택하세요</div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:10,marginBottom:16}}>
+                  {ALL_GROUPS.map(g=>{
+                    const cnt=groupCounts[g.id]||0; if(!cnt) return null;
+                    const isSel=bulkGroup===g.id;
+                    return(
+                      <div key={g.id} onClick={()=>setBulkGroup(isSel?null:g.id)}
+                        style={{background:isSel?`${g.color}15`:'rgba(255,255,255,0.03)',border:isSel?`1px solid ${g.color}50`:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'14px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                        <span style={{fontSize:22}}>{g.icon}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,fontWeight:600,color:isSel?g.color:'#cbd5e1'}}>{g.name}</div>
+                          <div style={{fontSize:10,color:'#64748b',marginTop:2}}>{g.desc}</div>
+                        </div>
+                        <div style={{fontSize:14,fontWeight:700,color:g.color}}>{cnt.toLocaleString()}명</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {bulkGroup&&(()=>{
+                  const g=getGroup(bulkGroup);
+                  const targets=customers.filter(c=>c.groupId===bulkGroup);
+                  const recTmpl=templates.find(t=>t.id===(TEMPLATE_MAPPING[bulkGroup]||[])[0]);
+                  return(
+                    <div style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${g.color}30`,borderRadius:14,padding:'20px 22px'}}>
+                      <div style={{fontSize:14,fontWeight:700,marginBottom:4,color:g.color}}>{g.icon} {g.name} 그룹 발송</div>
+                      <div style={{fontSize:12,color:'#64748b',marginBottom:12}}>{targets.length}명 · 추천 템플릿: {recTmpl?.title||'기본 메시지'}</div>
+                      {recTmpl&&<div style={{background:'rgba(255,255,255,0.04)',borderRadius:9,padding:'10px 13px',marginBottom:14,fontSize:11,color:'#94a3b8',lineHeight:1.7,maxHeight:80,overflowY:'auto'}}>{recTmpl.content.slice(0,200)}...</div>}
+                      {bulkResult&&<div style={{padding:'10px 14px',borderRadius:9,marginBottom:12,background:bulkResult.ok?'rgba(16,185,129,0.1)':'rgba(248,113,113,0.1)',color:bulkResult.ok?'#10b981':'#f87171',fontSize:12}}>{bulkResult.msg}</div>}
+                      <button onClick={()=>sendBulk(targets,g.name)} disabled={bulkSending}
+                        style={{width:'100%',padding:'12px',borderRadius:10,border:'none',cursor:bulkSending?'not-allowed':'pointer',fontSize:13,fontWeight:700,
+                          background:bulkSending?'rgba(99,102,241,0.3)':`linear-gradient(135deg,${g.color},${g.color}cc)`,color:'white'}}>
+                        {bulkSending?'발송 중...':`${g.icon} ${g.name} ${targets.length}명 발송`}
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* 개별 발송 모드 */}
+            {sendMode==='individual'&&(
           <div style={{display:'grid',gridTemplateColumns:'1fr 460px',gap:20}}>
             {/* 고객 목록 */}
             <div>
@@ -772,12 +1033,12 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                   <div style={{fontSize:13,color:'#475569'}}>왼쪽에서 고객을 클릭하면</div>
                   <div style={{fontSize:13,color:'#a5b4fc',marginTop:4}}>{apt.name}</div>
                   <div style={{fontSize:13,color:'#475569'}}>맞춤 템플릿을 추천해드립니다</div>
-                  <div style={{marginTop:16,fontSize:11,color:'#334155'}}>총 50개 템플릿 · 세그먼트별 자동 매칭</div>
+                  <div style={{marginTop:16,fontSize:11,color:'#334155'}}>총 {templates.length}개 템플릿 · 세그먼트별 자동 매칭</div>
                 </div>
               ):(()=>{
                 const g=getGroup(selected.groupId);
                 const recIds=TEMPLATE_MAPPING[g.id]||[];
-                const recTemplates=recIds.map(id=>TEMPLATES.find(t=>t.id===id)).filter(Boolean);
+                const recTemplates=recIds.slice(0,3).map(id=>templates.find(t=>t.id===id)||TEMPLATES.find(t=>t.id===id)).filter(Boolean);
                 return(
                   <div>
                     {/* 고객 카드 */}
@@ -815,7 +1076,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                         </div>
                         {!tmplSearch&&(
                           <div style={{marginBottom:12}}>
-                            <div style={{fontSize:11,color:g.color,fontWeight:600,marginBottom:7}}>⭐ {g.short} 추천 템플릿 ({recTemplates.length}개)</div>
+                            <div style={{fontSize:11,color:g.color,fontWeight:600,marginBottom:7}}>⭐ {g.short} 추천 템플릿 (3개)</div>
                             <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:200,overflowY:'auto'}}>
                               {recTemplates.map(t=>(
                                 <div key={t.id} onClick={()=>pickTemplate(t)}
@@ -830,7 +1091,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                           </div>
                         )}
                         <div>
-                          <div style={{fontSize:11,color:'#475569',marginBottom:6}}>{tmplSearch?`검색결과 (${searchedTemplates.length}개)`:'전체 50개 템플릿'}</div>
+                          <div style={{fontSize:11,color:'#475569',marginBottom:6}}>{tmplSearch?`검색결과 (${searchedTemplates.length}개)`:`전체 ${templates.length}개 템플릿`}</div>
                           <div style={{display:'flex',flexDirection:'column',gap:3,maxHeight:170,overflowY:'auto'}}>
                             {searchedTemplates.map(t=>(
                               <div key={t.id} onClick={()=>pickTemplate(t)}
@@ -884,6 +1145,8 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                 );
               })()}
             </div>
+          </div>
+            )}
           </div>
         )}
 
