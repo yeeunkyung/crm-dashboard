@@ -563,6 +563,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
   const [bulkEditMsg,setBulkEditMsg]=useState('');
   const [bulkAiLoading,setBulkAiLoading]=useState(false);
   const [bulkTmplSearch,setBulkTmplSearch]=useState('');
+  const [testPhone,setTestPhone]=useState('');
 
   const generateBulkAI=useCallback(async(targetGroup)=>{
     setBulkAiLoading(true);setBulkAiMsg('');setBulkEditMsg('');
@@ -1022,8 +1023,6 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
           <div>
             {/* SMS 테스트 배너 */}
             {(()=>{
-              const testCustomer=customers.find(c=>c.groupId===99);
-              const [testPhone,setTestPhone]=useState('');
               return(
                 <div style={{background:'rgba(16,185,129,0.08)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
                   <span style={{fontSize:16}}>🧪</span>
