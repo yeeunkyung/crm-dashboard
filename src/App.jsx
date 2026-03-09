@@ -684,7 +684,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
               <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>🟢 구글 시트 연동</div>
               <div style={{fontSize:12,color:'#64748b',marginBottom:14}}>시트 수정 후 새로고침 버튼 클릭하면 실시간 반영</div>
               <div style={{display:'flex',gap:8,marginBottom:10}}>
-                <input value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..."
+                <input value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} placeholder="구글 시트 URL 붙여넣기"
                   style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:12,outline:'none'}}/>
                 <button onClick={loadSheet} disabled={sheetLoading}
                   style={{background:'linear-gradient(135deg,#10b981,#059669)',border:'none',color:'white',padding:'8px 16px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>
@@ -936,7 +936,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
                 <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>🟢 구글 시트로 업데이트</div>
                 <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>팀원이 시트를 수정하면 버튼 클릭으로 바로 반영돼요</div>
                 <div style={{display:'flex',gap:8,marginBottom:10}}>
-                  <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..."
+                  <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="구글 시트 URL 붙여넣기"
                     style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:11,outline:'none'}}/>
                   <button onClick={loadTmplSheet} disabled={tmplSheetLoading}
                     style={{background:'linear-gradient(135deg,#10b981,#059669)',border:'none',color:'white',padding:'8px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>
@@ -1630,7 +1630,7 @@ ${p.banned?`- 금지 표현: ${p.banned}`:''}
           </div>
         )}
       </div>
-    </div>
+      </div>
   </div>
   </div>
   </div>
