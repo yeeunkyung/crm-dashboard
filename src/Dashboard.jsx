@@ -318,47 +318,106 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
     </div>
   );
 
-  if(tab==='overview') return (
-    <div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12,marginBottom:24}}>
-        {SEGMENTS.map(s=>(
-          <div key={s.tier} style={{background:s.tierBg,border:`1px solid ${s.tierBorder}`,borderRadius:14,padding:'14px 16px'}}>
-            <div style={{fontSize:11,color:s.tierColor,fontWeight:700,marginBottom:10}}>{s.tier}차 · {s.tierLabel}</div>
-            {s.groups.map(g=>{
-              const cnt=groupCounts[g.id]||0;
-              return(
-                <div key={g.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <span>{g.icon}</span>
-                    <span style={{fontSize:11,color:'#94a3b8'}}>{g.short}</span>
+  if(tab==='overview') {
+    // 1차/2차/3차 세그먼트만 상단 카드에 표시 (테스트 제외)
+    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차','4차'].includes(s.tier));
+    const tierTotals = mainSegments.map(s=>({
+      ...s,
+      total: s.groups.reduce((sum,g)=>sum+(groupCounts[g.id]||0),0),
+    }));
+    // 전체 비율 바용 (테스트 제외)
+    const allMainGroups = ALL_GROUPS.filter(g=>g.id!==99);
+    const grandTotal = allMainGroups.reduce((sum,g)=>sum+(groupCounts[g.id]||0),0)||1;
+    return (
+      <div>
+        {/* ── 상단 3개 티어 카드 ── */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:20}}>
+          {tierTotals.map(s=>(
+            <div key={s.tier} style={{background:s.tierBg,border:`1px solid ${s.tierBorder}`,borderRadius:16,padding:'18px 20px'}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:10,color:s.tierColor,fontWeight:700,marginBottom:4}}>{s.tier}차 분류</div>
+                  <div style={{fontSize:14,fontWeight:700,color:'#e2e8f0'}}>{s.tierLabel}</div>
+                </div>
+                <div style={{fontSize:22,fontWeight:800,color:s.tierColor}}>{s.total.toLocaleString()}명</div>
+              </div>
+              {s.groups.map(g=>{
+                const cnt=groupCounts[g.id]||0;
+                return(
+                  <div key={g.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:7}}>
+                      <span style={{fontSize:14}}>{g.icon}</span>
+                      <span style={{fontSize:11,color:'#cbd5e1'}}>{g.short}</span>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:700,color:g.color}}>{cnt.toLocaleString()}명</span>
                   </div>
-                  <span style={{fontSize:12,fontWeight:700,color:g.color}}>{cnt.toLocaleString()}</span>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* ── 전체 세그먼트 비율 바 ── */}
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 20px',marginBottom:20}}>
+          <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:12}}>
+            전체 세그먼트 비율 · {grandTotal.toLocaleString()}명
+          </div>
+          {/* 비율 바 */}
+          <div style={{display:'flex',borderRadius:8,overflow:'hidden',height:18,marginBottom:12}}>
+            {allMainGroups.map(g=>{
+              const cnt=groupCounts[g.id]||0;
+              const pct=(cnt/grandTotal)*100;
+              if(!pct) return null;
+              return(
+                <div key={g.id} title={`${g.short}: ${pct.toFixed(1)}%`}
+                  style={{width:`${pct}%`,background:g.color,transition:'width 0.5s',minWidth:pct>0.5?2:0}}/>
+              );
+            })}
+          </div>
+          {/* 범례 */}
+          <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
+            {allMainGroups.map(g=>{
+              const cnt=groupCounts[g.id]||0;
+              const pct=((cnt/grandTotal)*100).toFixed(1);
+              return(
+                <div key={g.id} style={{display:'flex',alignItems:'center',gap:5}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:g.color,flexShrink:0}}/>
+                  <span style={{fontSize:10,color:'#64748b'}}>{g.short} {pct}%</span>
                 </div>
               );
             })}
           </div>
-        ))}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:10}}>
-        {ALL_GROUPS.map(g=>{
-          const cnt=groupCounts[g.id]||0; if(!cnt) return null;
-          return(
-            <div key={g.id} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${g.color}25`,borderRadius:12,padding:'14px 16px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                <span style={{fontSize:20}}>{g.icon}</span>
-                <div>
-                  <div style={{fontSize:12,fontWeight:600,color:g.color}}>{g.name}</div>
-                  <div style={{fontSize:10,color:'#64748b'}}>{g.desc}</div>
+        </div>
+
+        {/* ── 세그먼트 정의 그리드 ── */}
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'18px 20px'}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#94a3b8',marginBottom:14}}>세그먼트 정의</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {ALL_GROUPS.filter(g=>g.id!==99).map(g=>{
+              const cnt=groupCounts[g.id]||0;
+              return(
+                <div key={g.id} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${g.color}20`,borderRadius:12,padding:'14px 16px'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:18}}>{g.icon}</span>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:700,color:g.color}}>{g.name}</div>
+                        <div style={{fontSize:10,color:'#475569',marginTop:1}}>{g.desc}</div>
+                      </div>
+                    </div>
+                    <span style={{fontSize:16,fontWeight:800,color:g.color,flexShrink:0,marginLeft:8}}>{cnt.toLocaleString()}명</span>
+                  </div>
+                  <div style={{fontSize:10,color:'#334155',borderTop:'1px solid rgba(255,255,255,0.05)',paddingTop:7,marginTop:4}}>
+                    추천 템플릿: {(TEMPLATE_MAPPING[g.id]||[]).map(id=>templates.find(t=>t.id===id)?.title).filter(Boolean).slice(0,2).join(', ')||'없음'}
+                  </div>
                 </div>
-                <div style={{marginLeft:'auto',fontSize:18,fontWeight:700,color:g.color}}>{cnt.toLocaleString()}</div>
-              </div>
-              <div style={{fontSize:10,color:'#475569'}}>추천 템플릿: {(TEMPLATE_MAPPING[g.id]||[]).map(id=>templates.find(t=>t.id===id)?.title).filter(Boolean).slice(0,2).join(', ')||'없음'}</div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   if(tab==='apt') return (
     <div style={{maxWidth:500}}>
