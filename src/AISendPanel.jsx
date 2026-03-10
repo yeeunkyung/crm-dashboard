@@ -3,6 +3,277 @@ import { ALL_GROUPS, TEMPLATE_MAPPING } from "./constants";
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 
+// ── 그룹별 고정 추천 메시지 (CSV 기반) ───────────────
+const GROUP_FIXED_MESSAGES = {
+  1: {
+    title: '관심 제로 그룹 — 고정 메시지',
+    content: `안녕하세요, $고객이름$님.
+청약은 복잡한 이야기보다, 설레는 내 집 마련의 시작이 되어야 합니다.
+"놓치지 마세요. 유성복합터미널과 트램 2호선이 가져올 유성구의 미래 가치가 곧 현실이 됩니다."
+
+✔ 상대동/도안신도시 주거 벨트의 중심지로 떠오르는 이 지역의 생활 환경 분석
+✔ 카이스트 및 연구단지 배후 수요가 보장하는 탄탄한 미래 자산 가치
+✔ 유성구의 새로운 랜드마크가 될 브랜드 네임벨류와 차별화된 입지 분석
+
+👉 대전 유성구의 숨겨진 가치, 전문가 분석 전체 보기`,
+  },
+  2: {
+    title: '관심 가능 그룹 — 고정 메시지',
+    content: `안녕하세요, $고객이름$님.
+
+자금 계획이 명확해지면, 불안함은 확신으로 바뀝니다.
+
+"망설이는 사이 사라지는 분양가 상한제의 기회, 숫자로 증명해 드립니다."
+✔ 실입주금 부담을 대폭 낮춘 대출 규제 완화 적용 시뮬레이션 및 혜택
+✔ 주변 시세 대비 저렴한 분양가 6억 선의 합리적 공급가와 시세 차익 분석
+✔ 발코니 확장 무상 혜택 등 초기 비용 절감을 위한 핵심 체크리스트
+
+👉 대전 유성구의 숨겨진 가치, 전문가 분석 전체 보기`,
+  },
+  3: {
+    title: '즉시 청약 가능 (1순위) — 고정 메시지',
+    content: `(광고) [OO아파트 청약 안내]
+안녕하세요 고객님. 지난 설문에서 '청약 의사 있음'을 선택해 주신 고객님께 안내드립니다.
+
+현재 고객님은 청약 1순위 자격 가능 고객군으로 확인되어 청약 준비 시 도움이 될 정보를 안내드립니다.
+이번 {단지명}은 {역세권 정보}과 {생활 인프라}를 갖춘 단지로 총 {세대수}세대 규모로 공급 예정입니다.
+
+청약 검토 시 확인하면 좋은 핵심 정보입니다.
+분양가 수준
+{분양가 정보 또는 시세 비교}
+
+예상 자금 계획
+{예상 실입주금 또는 대출 가능 구조}
+
+청약 자격 체크포인트
+{1순위 조건 또는 세대 조건}
+
+청약 전 내 자격과 예상 자금 계획을 확인해 두면 실제 청약 전략을 세우는 데 도움이 됩니다.
+
+👉 청약 가능 여부와 예상 실입주금 지금 확인하기
+{상담 링크}
+
+본 안내는 설문 응답 기반으로 발송되는 안내 메시지입니다.
+더 이상 안내를 원치 않으시면 '중지'라고 회신해 주세요.
+회신 시 동일 유형 안내 메시지는 발송되지 않습니다.`,
+  },
+  4: {
+    title: '즉시 청약 가능 (특별공급) — 고정 메시지',
+    content: `(광고) [OO아파트 특별공급 안내]
+
+특별공급은 일반 청약보다 경쟁률이 낮은 경우가 많아 실거주 목적 고객에게 좋은 기회가 될 수 있습니다.
+안녕하세요 고객님.
+지난 OO 설문에서 '청약 의사 있음'을 선택해 주신 고객님께 안내드립니다.
+
+고객님은 현재 신혼부부·생애최초·다자녀 등 특별공급 대상 가능 고객군으로 확인되어
+청약 준비 시 참고하실 수 있는 정보를 안내드립니다.
+
+이번 OO아파트는 △△역 인근 입지와 생활 인프라를 갖춘 단지로
+총 ○○세대 규모로 공급 예정입니다.
+
+특별공급 검토 시 확인하면 좋은 핵심 정보입니다.
+
+• 특별공급 장점
+자격 요건 충족 시 일반 청약 대비 당첨 가능성이 상대적으로 높은 기회
+
+• 가족 중심 설계
+최근 분양 단지는 실거주 중심 평면 구조와 수납 공간 설계가 강화되는 추세
+
+• 생활 인프라
+△△역 접근성과 학교·생활 편의시설 이용이 가능한 입지
+
+특별공급은 유형별 자격 조건과 제출 서류가 달라 사전 확인이 중요합니다.
+
+👉 특별공급 가능 여부와 신청 전략 확인하기
+(링크)
+
+본 안내는 설문 응답 기반으로 발송되는 안내 메시지입니다.
+더 이상 안내를 원치 않으시면 '중지'라고 회신해 주세요.
+회신 시 동일 유형 안내 메시지는 발송되지 않습니다.`,
+  },
+  5: {
+    title: '청약 가능 고객 (2순위) — 고정 메시지',
+    content: `(광고) [OO아파트 청약 안내]
+2순위에서도 실제 당첨 사례가 발생하는 경우가 있습니다.
+
+안녕하세요 고객님.
+지난 설문에서 '청약 의사 있음'을 선택해 주신 고객님께 안내드립니다.
+
+고객님은 현재 청약 2순위 자격 대상 가능 고객군으로 확인되어
+청약 준비 시 참고하실 수 있는 정보를 안내드립니다.
+
+이번 {단지명}은 {역세권 정보}과 {생활 인프라}를 갖춘 단지로
+총 {세대수}세대 규모로 공급 예정입니다.
+
+청약 검토 시 참고되는 핵심 정보입니다.
+
+• 평형별 경쟁률
+{평형별 경쟁률 또는 예상 경쟁률 정보}
+
+• 공급 물량
+{평형별 공급 세대수 또는 잔여 동호수 정보}
+
+• 예상 자금 계획
+{예상 실입주금 또는 대출 가능 구조}
+
+• 실제 2순위 사례
+일부 평형은 경쟁률에 따라 2순위 당첨이 발생하는 경우도 있습니다
+
+청약 전 경쟁률과 자금 계획을 확인하면 청약 전략을 세우는 데 도움이 됩니다.
+
+👉 2순위 청약 가능 전략 확인하기
+{상담 링크}
+
+본 안내는 설문 응답 기반으로 발송되는 안내 메시지입니다.
+더 이상 안내를 원치 않으시면 '중지'라고 회신해 주세요.
+회신 시 동일 유형 안내 메시지는 발송되지 않습니다.`,
+  },
+  6: {
+    title: '무순위 가능 고객 — 고정 메시지',
+    content: `(광고) [OO아파트 무순위 청약 안내]
+무순위 청약은 잔여세대 발생 시 일정이 갑자기 열리는 경우가 많습니다.
+
+안녕하세요 고객님.
+지난 설문에서 '청약 의사 있음'을 선택해 주신 고객님께 안내드립니다.
+
+고객님은 현재 무순위 청약 참여 가능 고객군으로 확인되어
+잔여세대 및 무순위 청약 관련 정보를 안내드립니다.
+
+이번 {단지명}은 {역세권 정보}과 {생활 인프라}를 갖춘 단지로
+총 {세대수}세대 규모로 공급된 단지입니다.
+
+무순위 청약 검토 시 확인하면 좋은 핵심 정보입니다.
+
+• 브랜드 가치
+{브랜드 정보 또는 시공사 정보}
+
+• 가격 경쟁력
+{분양가 또는 주변 시세 비교}
+
+• 무순위 청약 특징
+잔여세대 발생 시 청약통장 없이 신청 가능한 경우도 있음
+
+• 공급 물량 희소성
+{잔여 세대수 또는 공급 물량 정보}
+
+무순위 청약은 일정이 짧고 공급 물량이 제한적인 경우가 많아
+사전 일정 확인이 중요합니다.
+
+👉 무순위 청약 일정과 참여 방법 확인하기
+{상담 링크}
+
+본 안내는 설문 응답 기반으로 발송되는 안내 메시지입니다.
+더 이상 안내를 원치 않으시면 '중지'라고 회신해 주세요.
+회신 시 동일 유형 안내 메시지는 발송되지 않습니다.`,
+  },
+  7: {
+    title: 'MZ 주거 그룹 — 고정 메시지',
+    content: `[분석 리포트]
+$고객 이름$님, 설문 해주신 내용을 기반으로 맞춤 분석 정보입니다 🏠
+    **래미안 원베일리 2차** 신혼부부 특공 분석
+    📍 서울 서초구 반포동 | 청약일: 4/15
+   
+    ■ $고객 이름$님, 맞춤 핵심 포인트
+    ▶ 안전마진: 주변 구축아파트 전세가 수준 분양가
+    ▶ 워라밸: 지하철 3분 거리 직주근접 완성
+    ▶ 미래가치: 한강뷰 프리미엄 + 초품아 희소성
+    
+    ■ 신혼부부 특공 1:1 맞춤 상담
+    - 개인별 자금 스케줄링 컨설팅
+    - 실거주 최적 평형대 추천
+    - 대출한도 및 금리 시뮬레이션
+    
+    ▼ VR 투어 & 무료 상담 신청
+    [링크]
+    
+    ※정보제공 동의고객 발송
+    ※수신거부 시 '중지' 회신`,
+  },
+  8: {
+    title: '시니어 주거 그룹 — 고정 메시지',
+    content: `[분석 리포트] 📋
+    $고객정보$님, 설문 해주신 내용을 기반으로 래미안 원베일리 2차 맞춤 분석 정보입니다.
+    
+    ■ 핵심 가치 3가지
+    1️⃣ 브랜드 파워: 삼성물산 래미안의 1군 건설사 프리미엄으로 장기 자산가치 안정성 확보
+    2️⃣ 메디컬 호재: 서울대병원·삼성서울병원 등 상급종합병원 접근성으로 생활 안심 환경
+    3️⃣ 대단지 규모: 320세대 규모의 반포동 신축으로 지역 랜드마크화 및 활발한 거래량 기대
+    
+    ▶ 청약일정: 2026년 4월 15일
+    ▶ 1순위 자격 보유로 유리한 조건
+    
+    지정은행 연계 상담을 통해 자금 스케줄링과 장기 보유 전략을 맞춤 설계해드립니다.
+    ※ 본 안내는 요청하신 정보 제공 동의에 따라 발송되었습니다. 거부는 '중지' 회신.`,
+  },
+  9: {
+    title: '전략 자산 증식 그룹 — 고정 메시지',
+    content: `[분석리포트]
+$고객$님, 설문 해주신 내용을 기반으로
+지난번 확인하신 OO 아파트 맞춤 분석 정보입니다.
+
+투자 목적 관점에서 데이터 기반 상승 요인 중심으로 정리했습니다.
+
+■ 핵심 가치 3가지
+
+1️⃣ 상승률 모멘텀
+인근 대장주 단지 대비 평당가 격차가 존재하는 구간으로
+입주 시점 키맞추기 가격 상승 가능성이 기대됩니다.
+
+2️⃣ 기업·산업 수요 기반
+주변 산업단지 및 기업 수요 유입으로
+실거주 + 임대 수요가 동시에 형성되는 구조입니다.
+
+3️⃣ 광역 교통망 확장성
+현재 운영 중인 교통망과 더불어
+향후 광역 교통 확장 계획에 따라 생활권 확장이 예상됩니다.
+
+▶ 청약일정: OO년 OO월 OO일
+▶ 1순위 자격 보유 시 전략적 진입 가능 구간
+
+▶ 입주 시점 예상 시세 범위
+▶ 전세가율 기반 투자금 구조
+▶ 보유 전략 vs 단기 엑시트 시뮬레이션
+등 데이터 기반 수익 분석 리포트를 제공해드립니다.
+
+※ 본 안내는 요청하신 정보 제공 동의에 따라 발송되었습니다.
+거부는 '중지' 회신.`,
+  },
+  10: {
+    title: '잠재적 줍줍 수요 그룹 — 고정 메시지',
+    content: `[분석 리포트] 📋
+$고객$님, 설문 해주신 내용을 기반으로
+지난번 확인하신 OO 아파트 정보를 처음 분양을 알아보시는 분 관점에서 정리했습니다.
+
+처음 청약을 준비하실 때 가장 많이 확인하시는 기본 조건 중심으로 안내드립니다.
+
+■ 핵심 가치 3가지
+1️⃣ 가격 경쟁력 (안전 진입 구간)
+주변 구축 단지 대비 가격 경쟁력이 형성된 분양 구조로
+초기 진입 부담이 비교적 낮은 편입니다.
+
+2️⃣ 생활 인프라 형성
+대형마트, 병원, 공원 등
+기존 생활 인프라가 형성되어 있어 거주 편의성이 높은 입지입니다.
+
+3️⃣ 도보권 교육 환경
+단지 주변 초·중·고 교육시설이 위치해 있어
+향후 실거주 안정성 측면에서도 장점이 있습니다.
+
+▶ 청약일정: OO년 OO월 OO일
+▶ 청약 통장 보유 시 기본 자격 확인 가능
+
+상담 시
+▶청약 자격 여부 확인
+▶예상 실입주금
+▶대출 가능 금액
+▶청약 절차 안내
+까지 처음 분양을 준비하시는 분 기준으로 단계별 안내해드립니다.
+
+※ 본 안내는 요청하신 정보 제공 동의에 따라 발송되었습니다.
+거부는 '중지' 회신.`,
+  },
+};
+
 // ── 헬퍼 ──────────────────────────────────────────────
 const getGroup = id => ALL_GROUPS.find(g => g.id === id) || {
   name: '미분류', color: '#64748b', icon: '❓', short: '미분류',
@@ -386,6 +657,7 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
   const [sendLog, setSendLog] = useState([]);
   const [sendDone, setSendDone] = useState(false);
   const [promptSaveStatus, setPromptSaveStatus] = useState('saved');
+  const [localIsAd, setLocalIsAd] = useState(isAd); // 광고 표기 — 발송 실행 영역에서 관리
 
   const logRef = useRef(null);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [sendLog]);
@@ -423,7 +695,7 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
 
     for (const c of selectedCustomers) {
       const g = getGroup(c.groupId);
-      const msgToSend = applyAdPrefix(finalMsg, isAd);
+      const msgToSend = applyAdPrefix(finalMsg, localIsAd);
       try {
         if (c.phone && c.phone.length >= 10) {
           await sendSMS(c.phone, msgToSend);
@@ -526,51 +798,49 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
               {/* 템플릿 선택 */}
               {msgSource === 'template' && (
                 <div>
-                  {/* 그룹별 추천 템플릿 */}
+                  {/* 그룹별 고정 추천 메시지 (CSV 기반) */}
                   {selectedCustomers.length > 0 && (() => {
-                    // 선택된 고객들의 그룹ID 집합
                     const uniqueGroups = [...new Set(selectedCustomers.map(c => c.groupId))];
-                    const recs = [];
-                    uniqueGroups.forEach(gid => {
-                      const g = getGroup(gid);
-                      const recIds = TEMPLATE_MAPPING[gid] || [];
-                      recIds.forEach(id => {
-                        const t = templates.find(t => t.id === id);
-                        if (t && !recs.find(r => r.t.id === id)) recs.push({ t, g });
-                      });
-                    });
-                    if (!recs.length) return null;
+                    const fixedRecs = uniqueGroups
+                      .filter(gid => GROUP_FIXED_MESSAGES[gid])
+                      .map(gid => ({ gid, g: getGroup(gid), fm: GROUP_FIXED_MESSAGES[gid] }));
+                    if (!fixedRecs.length) return null;
                     return (
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <span>⭐ 그룹 추천 템플릿</span>
-                          <span style={{ color: '#475569', fontWeight: 400 }}>({uniqueGroups.length}개 그룹 기준)</span>
+                          <span>⭐ 그룹 고정 추천 메시지</span>
+                          <span style={{ color: '#475569', fontWeight: 400 }}>({fixedRecs.length}개 그룹)</span>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {recs.slice(0, 4).map(({ t, g }) => (
-                            <div
-                              key={t.id}
-                              className="tmpl-item"
-                              onClick={() => handleSelectTemplate(t)}
-                              style={{
-                                background: selTemplate?.id === t.id ? `${g.color}18` : 'rgba(255,255,255,0.04)',
-                                border: `1px solid ${selTemplate?.id === t.id ? `${g.color}55` : `${g.color}22`}`,
-                                borderRadius: 8, padding: '8px 12px', cursor: 'pointer',
-                                borderLeft: `3px solid ${g.color}`,
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                                <span style={{ fontSize: 11 }}>{g.icon}</span>
-                                <span style={{ fontSize: 10, color: g.color, fontWeight: 600 }}>{g.short}</span>
-                                {selTemplate?.id === t.id && <span style={{ fontSize: 9, color: g.color, marginLeft: 'auto' }}>✓ 선택됨</span>}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          {fixedRecs.map(({ gid, g, fm }) => {
+                            const isSelected = selTemplate?.id === `fixed_${gid}`;
+                            return (
+                              <div
+                                key={gid}
+                                className="tmpl-item"
+                                onClick={() => handleSelectTemplate({ id: `fixed_${gid}`, title: fm.title, content: fm.content })}
+                                style={{
+                                  background: isSelected ? `${g.color}18` : 'rgba(255,255,255,0.04)',
+                                  border: `1px solid ${isSelected ? `${g.color}60` : `${g.color}25`}`,
+                                  borderRadius: 9, padding: '9px 12px', cursor: 'pointer',
+                                  borderLeft: `3px solid ${g.color}`,
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                  <span style={{ fontSize: 13 }}>{g.icon}</span>
+                                  <span style={{ fontSize: 11, color: g.color, fontWeight: 700 }}>{g.short}</span>
+                                  <span style={{ fontSize: 9, color: '#475569', background: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: 10 }}>고정 메시지</span>
+                                  {isSelected && <span style={{ fontSize: 9, color: g.color, marginLeft: 'auto', fontWeight: 700 }}>✓ 선택됨</span>}
+                                </div>
+                                <div style={{ fontSize: 10, color: '#334155', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                  {fm.content.slice(0, 80)}...
+                                </div>
                               </div>
-                              <div style={{ fontSize: 11, color: selTemplate?.id === t.id ? '#e2e8f0' : '#94a3b8', fontWeight: selTemplate?.id === t.id ? 600 : 400 }}>{t.title}</div>
-                              <div style={{ fontSize: 10, color: '#334155', marginTop: 2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{t.content.slice(0, 50)}...</div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                         <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '12px 0' }} />
-                        <div style={{ fontSize: 10, color: '#475569', marginBottom: 7 }}>📋 전체 템플릿</div>
+                        <div style={{ fontSize: 10, color: '#475569', marginBottom: 7 }}>📋 전체 템플릿에서 선택</div>
                       </div>
                     );
                   })()}
@@ -636,9 +906,6 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
               )}
 
               {/* 메시지 편집 영역 */}
-              {isAd && editMsg && (
-                <div style={{ fontSize: 10, color: '#f59e0b', marginBottom: 4 }}>⚠️ 광고 표기 ON — (광고) 자동 추가됨</div>
-              )}
               <textarea
                 value={editMsg}
                 onChange={e => setEditMsg(e.target.value)}
@@ -661,11 +928,23 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
           <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '16px 18px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>🚀 발송 실행</div>
-              <div style={{ fontSize: 11, color: '#475569' }}>
-                {selectedCustomers.length > 0 ? (
-                  <span style={{ color: '#a5b4fc' }}>{selectedCustomers.length}명 대상</span>
-                ) : '고객 미선택'}
-                {editMsg && <span style={{ color: '#10b981', marginLeft: 8 }}>· 메시지 준비됨</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* 광고 표기 토글 — 발송 실행 옆 */}
+                <div
+                  onClick={() => setLocalIsAd(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: localIsAd ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${localIsAd ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  <div style={{ width: 26, height: 14, borderRadius: 10, background: localIsAd ? '#f59e0b' : '#334155', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', top: 2, left: localIsAd ? 13 : 2, width: 10, height: 10, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: localIsAd ? '#f59e0b' : '#64748b' }}>{localIsAd ? '(광고) ON' : '광고표기'}</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#475569' }}>
+                  {selectedCustomers.length > 0 ? (
+                    <span style={{ color: '#a5b4fc' }}>{selectedCustomers.length}명 대상</span>
+                  ) : '고객 미선택'}
+                  {editMsg && <span style={{ color: '#10b981', marginLeft: 8 }}>· 메시지 준비됨</span>}
+                </div>
               </div>
             </div>
 
@@ -691,7 +970,7 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
             {/* 메시지 미리보기 */}
             {editMsg && (
               <div style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 9, padding: '10px 13px', marginBottom: 12, fontSize: 11, color: '#94a3b8', lineHeight: 1.8, maxHeight: 100, overflowY: 'auto', whiteSpace: 'pre-line' }}>
-                {applyAdPrefix(editMsg, isAd)}
+                {localIsAd && <span style={{ color: '#f59e0b', fontWeight: 600 }}>(광고) </span>}{editMsg}
               </div>
             )}
 
