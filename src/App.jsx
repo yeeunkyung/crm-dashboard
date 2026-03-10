@@ -898,24 +898,57 @@ ${g?`- 대상 특성: ${g.desc}`:''}
                     );
                   })}
                 </div>
-                {bulkGroup&&(()=>{
-                  const g=getGroup(bulkGroup);
-                  const targets=customers.filter(c=>c.groupId===bulkGroup);
-                  const recTmpl=templates.find(t=>t.id===(TEMPLATE_MAPPING[bulkGroup]||[])[0]);
-                  return(
-                    <div style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${g.color}30`,borderRadius:14,padding:'20px 22px'}}>
-                      <div style={{fontSize:14,fontWeight:700,marginBottom:4,color:g.color}}>{g.icon} {g.name} 그룹 발송</div>
-                      <div style={{fontSize:12,color:'#64748b',marginBottom:12}}>{targets.length}명 · 추천 템플릿: {recTmpl?.title||'기본 메시지'}</div>
-                      {recTmpl&&<div style={{background:'rgba(255,255,255,0.04)',borderRadius:9,padding:'10px 13px',marginBottom:14,fontSize:11,color:'#94a3b8',lineHeight:1.7,maxHeight:80,overflowY:'auto'}}>{recTmpl.content.slice(0,200)}...</div>}
-                      {bulkResult&&<div style={{padding:'10px 14px',borderRadius:9,marginBottom:12,background:bulkResult.ok?'rgba(16,185,129,0.1)':'rgba(248,113,113,0.1)',color:bulkResult.ok?'#10b981':'#f87171',fontSize:12}}>{bulkResult.msg}</div>}
-                      <button onClick={()=>sendBulk(targets,g.name)} disabled={bulkSending}
-                        style={{width:'100%',padding:'12px',borderRadius:10,border:'none',cursor:bulkSending?'not-allowed':'pointer',fontSize:13,fontWeight:700,
-                          background:bulkSending?'rgba(99,102,241,0.3)':`linear-gradient(135deg,${g.color},${g.color}cc)`,color:'white'}}>
-                        {bulkSending?'발송 중...':`${g.icon} ${g.name} ${targets.length}명 발송`}
-                      </button>
-                    </div>
-                  );
-                })()}
+               {bulkGroup && (
+  (() => {
+    const g = getGroup(bulkGroup);
+    const targets = customers.filter(c => c.groupId === bulkGroup);
+    const recTmpl = templates.find(
+      t => t.id === (TEMPLATE_MAPPING[bulkGroup] || [])[0]
+    );
+
+    return (
+      <div style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${g.color}30`,borderRadius:14,padding:'20px 22px'}}>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:4,color:g.color}}>
+          {g.icon} {g.name} 그룹 발송
+        </div>
+
+        <div style={{fontSize:12,color:'#64748b',marginBottom:12}}>
+          {targets.length}명 · 추천 템플릿: {recTmpl?.title || '기본 메시지'}
+        </div>
+
+        {recTmpl && (
+          <div style={{background:'rgba(255,255,255,0.04)',borderRadius:9,padding:'10px 13px',marginBottom:14,fontSize:11,color:'#94a3b8',lineHeight:1.7,maxHeight:80,overflowY:'auto'}}>
+            {recTmpl.content.slice(0,200)}...
+          </div>
+        )}
+
+        {bulkResult && (
+          <div style={{padding:'10px 14px',borderRadius:9,marginBottom:12,background:bulkResult.ok?'rgba(16,185,129,0.1)':'rgba(248,113,113,0.1)',color:bulkResult.ok?'#10b981':'#f87171',fontSize:12}}>
+            {bulkResult.msg}
+          </div>
+        )}
+
+        <button
+          onClick={()=>sendBulk(targets,g.name)}
+          disabled={bulkSending}
+          style={{
+            width:'100%',
+            padding:'12px',
+            borderRadius:10,
+            border:'none',
+            cursor:bulkSending?'not-allowed':'pointer',
+            fontSize:13,
+            fontWeight:700,
+            background:bulkSending?'rgba(99,102,241,0.3)':`linear-gradient(135deg,${g.color},${g.color}cc)`,
+            color:'white'
+          }}
+        >
+          {bulkSending ? '발송 중...' : `${g.icon} ${g.name} ${targets.length}명 발송`}
+        </button>
+      </div>
+    );
+  })()
+)}
               </div>
             )}
 
