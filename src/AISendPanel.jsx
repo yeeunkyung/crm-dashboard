@@ -798,7 +798,7 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
               {/* 템플릿 선택 */}
               {msgSource === 'template' && (
                 <div>
-                  {/* 그룹별 고정 추천 메시지 (CSV 기반) */}
+                  {/* 추천 메시지 (CSV 기반) */}
                   {selectedCustomers.length > 0 && (() => {
                     const uniqueGroups = [...new Set(selectedCustomers.map(c => c.groupId))];
                     const fixedRecs = uniqueGroups
