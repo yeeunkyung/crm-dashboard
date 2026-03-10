@@ -128,25 +128,61 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
     setSheetLoading(false);
   };
 
-  const handleTmplCSV = file => {
+  // CSV에서 템플릿 파싱 — "고객 분류" / "메시징 템플릿" 컬럼 우선, 기존 컬럼도 fallback 지원
+  const parseTmplRows = (text, startId) => {
+    // 직접 파싱: 첫 행 헤더, 이후 데이터
+    const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    // papaparse 방식으로 직접 파싱 (큰따옴표 멀티라인 처리)
+    const records = [];
+    let inQuote = false, field = '', fields = [], i = 0;
+    while(i < lines.length){
+      const ch = lines[i];
+      if(ch==='"'){
+        if(inQuote && lines[i+1]==='"'){ field+='"'; i+=2; continue; }
+        inQuote = !inQuote;
+      } else if(ch===',' && !inQuote){
+        fields.push(field); field='';
+      } else if(ch==='\n' && !inQuote){
+        fields.push(field); records.push(fields); fields=[]; field='';
+      } else { field+=ch; }
+      i++;
+    }
+    if(field||fields.length) { fields.push(field); if(fields.some(f=>f)) records.push(fields); }
+
+    if(records.length<2) return [];
+    const headers = records[0].map(h=>h.trim().replace(/^\uFEFF/,''));
+    const rows = [];
+    let nextId = startId;
+    for(let r=1;r<records.length;r++){
+      const row = records[r];
+      const obj = {}; headers.forEach((h,idx)=>{ obj[h]=(row[idx]||'').trim(); });
+      const title = obj['고객 분류']||obj['템플릿 제목']||obj['title']||'';
+      const content = obj['메시징 템플릿 (대전 유성구 적용)']||obj['메시징 템플릿']||obj['친구톡 내용']||obj['대체문자 내용']||obj['content']||'';
+      if(title && content){ rows.push({id:nextId++, title:title.trim(), content:content.trim()}); }
+    }
+    return rows;
+  };
+
+  const handleTmplCSV = (file, mode='replace') => {
     if(!file) return; setTmplSheetError('');
     const reader = new FileReader();
     reader.onload = e => {
       try {
-        const parsed = parseCSV(e.target.result);
-        if(!parsed.length){ setTmplSheetError('데이터를 읽을 수 없어요.'); return; }
-        const rows = parsed.map((row,idx)=>({
-          id:idx,
-          title:row['템플릿 제목']||row['title']||`템플릿${idx+1}`,
-          content:row['친구톡 내용']||row['대체문자 내용']||row['content']||'',
-        })).filter(t=>t.title&&t.content);
-        setTemplates(rows); setTmplSource('csv');
+        const maxId = templates.reduce((m,t)=>Math.max(m,t.id),0);
+        const rows = parseTmplRows(e.target.result, mode==='add' ? maxId+1 : 200);
+        if(!rows.length){ setTmplSheetError('데이터를 읽을 수 없어요. "고객 분류", "메시징 템플릿" 컬럼을 확인해주세요.'); return; }
+        if(mode==='add'){
+          setTemplates(prev=>[...prev, ...rows]);
+        } else {
+          setTemplates(rows);
+        }
+        setTmplSource('csv');
       } catch(err){ setTmplSheetError('파일 오류: '+err.message); }
     };
     reader.readAsText(file,'UTF-8');
   };
 
-  const loadTmplSheet = async () => {
+  const loadTmplSheet = async (mode='replace') => {
     if(!tmplSheetUrl) return;
     setTmplSheetLoading(true); setTmplSheetError('');
     try {
@@ -156,11 +192,18 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
       const data = await res.json();
       if(data.error) throw new Error(data.error.message);
       const headers = data.values[0].map(h=>h.trim());
-      const rows = data.values.slice(1).map((row,idx)=>{
-        const obj={}; headers.forEach((h,i)=>{obj[h]=row[i]||'';});
-        return {id:idx, title:obj['템플릿 제목']||`템플릿${idx+1}`, content:obj['친구톡 내용']||obj['대체문자 내용']||''};
-      }).filter(t=>t.title&&t.content);
-      setTemplates(rows); setTmplSource('sheet');
+      const maxId = templates.reduce((m,t)=>Math.max(m,t.id),0);
+      let nextId = mode==='add' ? maxId+1 : 200;
+      const rows = data.values.slice(1).map((row)=>{
+        const obj={}; headers.forEach((h,i)=>{obj[h]=(row[i]||'').trim();});
+        const title = obj['고객 분류']||obj['템플릿 제목']||'';
+        const content = obj['메시징 템플릿 (대전 유성구 적용)']||obj['메시징 템플릿']||obj['친구톡 내용']||obj['대체문자 내용']||'';
+        return title&&content ? {id:nextId++, title, content} : null;
+      }).filter(Boolean);
+      if(!rows.length) throw new Error('"고객 분류", "메시징 템플릿" 컬럼을 확인해주세요.');
+      if(mode==='add'){ setTemplates(prev=>[...prev, ...rows]); }
+      else { setTemplates(rows); }
+      setTmplSource('sheet');
     } catch(e){ setTmplSheetError('연동 실패: '+e.message); }
     setTmplSheetLoading(false);
   };
@@ -432,45 +475,14 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
   );
 
   if(tab==='templates') return (
-    <div style={{maxWidth:760}}>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}}>
-        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:10,color:'#94a3b8'}}>📄 CSV 업로드</div>
-          {tmplSource!=='default'?(
-            <div>
-              <div style={{color:'#10b981',fontWeight:600,fontSize:12,marginBottom:4}}>{templates.length}개 템플릿 로드 완료</div>
-              <button onClick={()=>tmplFileRef.current.click()} style={{background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.3)',color:'#a5b4fc',padding:'5px 14px',borderRadius:7,cursor:'pointer',fontSize:11}}>다른 파일로 교체</button>
-            </div>
-          ):(
-            <button onClick={()=>tmplFileRef.current.click()} style={{width:'100%',padding:'10px',borderRadius:9,border:'2px dashed rgba(99,102,241,0.3)',background:'transparent',color:'#6366f1',cursor:'pointer',fontSize:12}}>📁 파일 선택</button>
-          )}
-          <input ref={tmplFileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleTmplCSV(e.target.files[0])}/>
-        </div>
-        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:10,color:'#94a3b8'}}>🟢 구글 시트 연동</div>
-          <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="구글 시트 URL"
-            style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:12,outline:'none',marginBottom:8}}/>
-          <button onClick={loadTmplSheet} disabled={tmplSheetLoading} style={{width:'100%',padding:'8px',borderRadius:8,border:'none',cursor:'pointer',fontSize:12,background:'rgba(16,185,129,0.2)',color:'#10b981'}}>
-            {tmplSheetLoading?'로딩 중...':'🔗 연동하기'}
-          </button>
-          {tmplSheetError&&<div style={{fontSize:11,color:'#f87171',marginTop:6}}>{tmplSheetError}</div>}
-        </div>
-      </div>
-      <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 20px'}}>
-        <div style={{fontSize:13,fontWeight:600,marginBottom:12,color:'#94a3b8'}}>현재 적용된 템플릿 목록 ({templates.length}개)</div>
-        <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:400,overflowY:'auto'}}>
-          {templates.map((t,i)=>(
-            <div key={t.id} style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:9,padding:'10px 14px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                <span style={{fontSize:10,color:'#475569',background:'rgba(255,255,255,0.06)',padding:'1px 7px',borderRadius:10}}>#{i}</span>
-                <span style={{fontSize:12,fontWeight:600,color:'#cbd5e1'}}>{t.title}</span>
-              </div>
-              <div style={{fontSize:11,color:'#475569',lineHeight:1.6}}>{t.content.slice(0,100)}{t.content.length>100?'...':''}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <TemplatesTab
+      templates={templates} setTemplates={setTemplates}
+      tmplSource={tmplSource} setTmplSource={setTmplSource}
+      tmplFileRef={tmplFileRef} handleTmplCSV={handleTmplCSV}
+      tmplSheetUrl={tmplSheetUrl} setTmplSheetUrl={setTmplSheetUrl}
+      tmplSheetLoading={tmplSheetLoading} tmplSheetError={tmplSheetError} setTmplSheetError={setTmplSheetError}
+      loadTmplSheet={loadTmplSheet}
+    />
   );
 
   if(tab==='prompts') return (
@@ -482,6 +494,142 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
   );
 
   return null;
+}
+
+function TemplatesTab({ templates, setTemplates, tmplSource, setTmplSource, tmplFileRef, handleTmplCSV, tmplSheetUrl, setTmplSheetUrl, tmplSheetLoading, tmplSheetError, setTmplSheetError, loadTmplSheet }) {
+  const [addModal, setAddModal] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newContent, setNewContent] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // id to confirm delete
+  const addFileRef = useRef();
+
+  const handleDelete = id => {
+    setTemplates(prev => prev.filter(t => t.id !== id));
+    setDeleteConfirm(null);
+  };
+
+  const handleAdd = () => {
+    if(!newTitle.trim()||!newContent.trim()) return;
+    const maxId = templates.reduce((m,t)=>Math.max(m,t.id),0);
+    setTemplates(prev=>[...prev, {id:maxId+1, title:newTitle.trim(), content:newContent.trim()}]);
+    setNewTitle(''); setNewContent(''); setAddModal(false);
+  };
+
+  const btnStyle = (color='#6366f1') => ({
+    padding:'6px 14px', borderRadius:8, border:`1px solid ${color}44`,
+    background:`${color}18`, color, cursor:'pointer', fontSize:11, fontWeight:600,
+  });
+
+  return (
+    <div style={{maxWidth:800}}>
+      {/* 추가 모달 */}
+      {addModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#1e2538',border:'1px solid rgba(255,255,255,0.12)',borderRadius:16,padding:'24px 28px',width:520,maxWidth:'90vw'}}>
+            <div style={{fontSize:14,fontWeight:700,color:'#e2e8f0',marginBottom:18}}>✏️ 템플릿 직접 추가</div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:5,fontWeight:500}}>그룹명 / 제목</div>
+            <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="예: 관심 제로 그룹"
+              style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:8,padding:'9px 12px',color:'#e2e8f0',fontSize:13,outline:'none',marginBottom:12,boxSizing:'border-box'}}/>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:5,fontWeight:500}}>메시지 내용</div>
+            <textarea value={newContent} onChange={e=>setNewContent(e.target.value)} placeholder="메시지 내용을 입력하세요..."
+              rows={8} style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:8,padding:'9px 12px',color:'#e2e8f0',fontSize:12,outline:'none',resize:'vertical',marginBottom:18,boxSizing:'border-box',lineHeight:1.7}}/>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={()=>{setAddModal(false);setNewTitle('');setNewContent('');}} style={{...btnStyle('#94a3b8')}}>취소</button>
+              <button onClick={handleAdd} style={{...btnStyle('#6366f1'),background:'rgba(99,102,241,0.3)'}}>추가하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {deleteConfirm!==null&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#1e2538',border:'1px solid rgba(248,113,113,0.3)',borderRadius:14,padding:'22px 26px',width:360}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#f87171',marginBottom:10}}>🗑️ 템플릿 삭제</div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:20}}>
+              <strong style={{color:'#e2e8f0'}}>"{templates.find(t=>t.id===deleteConfirm)?.title}"</strong><br/>을 삭제하시겠어요? 되돌릴 수 없습니다.
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={()=>setDeleteConfirm(null)} style={btnStyle('#94a3b8')}>취소</button>
+              <button onClick={()=>handleDelete(deleteConfirm)} style={{...btnStyle('#f87171'),background:'rgba(248,113,113,0.2)'}}>삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 업로드 카드 */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}}>
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
+          <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:'#94a3b8'}}>📄 CSV 업로드</div>
+          <div style={{fontSize:10,color:'#475569',marginBottom:10,lineHeight:1.6}}>
+            컬럼: <span style={{color:'#a5b4fc'}}>고객 분류</span> / <span style={{color:'#a5b4fc'}}>메시징 템플릿</span>
+          </div>
+          <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+            <button onClick={()=>{ addFileRef.current._mode='replace'; addFileRef.current.click(); }}
+              style={{...btnStyle('#6366f1'), padding:'7px 12px'}}>🔄 교체 업로드</button>
+            <button onClick={()=>{ addFileRef.current._mode='add'; addFileRef.current.click(); }}
+              style={{...btnStyle('#10b981'), padding:'7px 12px'}}>➕ 추가 업로드</button>
+          </div>
+          <input ref={addFileRef} type="file" accept=".csv" style={{display:'none'}}
+            onChange={e=>{ handleTmplCSV(e.target.files[0], addFileRef.current._mode||'replace'); e.target.value=''; }}/>
+        </div>
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
+          <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:'#94a3b8'}}>🟢 구글 시트 연동</div>
+          <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="구글 시트 URL"
+            style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:11,outline:'none',marginBottom:8,boxSizing:'border-box'}}/>
+          <div style={{display:'flex',gap:7}}>
+            <button onClick={()=>loadTmplSheet('replace')} disabled={tmplSheetLoading}
+              style={{...btnStyle('#6366f1'),flex:1}}>{tmplSheetLoading?'로딩 중...':'🔄 교체 연동'}</button>
+            <button onClick={()=>loadTmplSheet('add')} disabled={tmplSheetLoading}
+              style={{...btnStyle('#10b981'),flex:1}}>{tmplSheetLoading?'...':'➕ 추가 연동'}</button>
+          </div>
+          {tmplSheetError&&<div style={{fontSize:11,color:'#f87171',marginTop:6}}>{tmplSheetError}</div>}
+        </div>
+      </div>
+
+      {/* 템플릿 목록 */}
+      <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 20px'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:600,color:'#94a3b8'}}>
+            현재 적용된 템플릿 목록
+            <span style={{marginLeft:8,fontSize:11,color:'#6366f1',background:'rgba(99,102,241,0.15)',padding:'2px 10px',borderRadius:20,fontWeight:700}}>{templates.length}개</span>
+          </div>
+          <button onClick={()=>setAddModal(true)}
+            style={{padding:'7px 16px',borderRadius:9,border:'1px solid rgba(99,102,241,0.4)',background:'rgba(99,102,241,0.2)',color:'#a5b4fc',cursor:'pointer',fontSize:12,fontWeight:600}}>
+            ＋ 직접 추가
+          </button>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:520,overflowY:'auto',paddingRight:4}}>
+          {templates.map((t,i)=>{
+            const isExpanded = expandedId===t.id;
+            const isRecommended = t.id>=100 && t.id<=109;
+            return (
+              <div key={t.id} style={{background: isRecommended?'rgba(99,102,241,0.06)':'rgba(255,255,255,0.03)', border:`1px solid ${isRecommended?'rgba(99,102,241,0.2)':'rgba(255,255,255,0.07)'}`,borderRadius:9,overflow:'hidden'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer'}} onClick={()=>setExpandedId(isExpanded?null:t.id)}>
+                  <span style={{fontSize:10,color:'#475569',background:'rgba(255,255,255,0.06)',padding:'1px 7px',borderRadius:10,flexShrink:0}}>#{i+1}</span>
+                  {isRecommended&&<span style={{fontSize:9,color:'#a5b4fc',background:'rgba(99,102,241,0.2)',padding:'1px 6px',borderRadius:8,fontWeight:700,flexShrink:0}}>추천</span>}
+                  <span style={{fontSize:12,fontWeight:600,color: isRecommended?'#c4b5fd':'#cbd5e1',flex:1}}>{t.title}</span>
+                  <span style={{fontSize:10,color:'#334155'}}>{isExpanded?'▲':'▼'}</span>
+                  <button onClick={e=>{e.stopPropagation(); setDeleteConfirm(t.id);}}
+                    style={{padding:'3px 10px',borderRadius:7,border:'1px solid rgba(248,113,113,0.25)',background:'rgba(248,113,113,0.08)',color:'#f87171',cursor:'pointer',fontSize:11,flexShrink:0}}>
+                    삭제
+                  </button>
+                </div>
+                {isExpanded&&(
+                  <div style={{padding:'0 14px 12px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+                    <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.8,whiteSpace:'pre-line',background:'rgba(0,0,0,0.2)',borderRadius:8,padding:'10px 12px',marginTop:10,maxHeight:220,overflowY:'auto'}}>
+                      {t.content}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, promptSaveStatus, setPromptSaveStatus }) {
