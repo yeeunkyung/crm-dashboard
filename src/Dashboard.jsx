@@ -792,6 +792,14 @@ function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, pro
                 ))}
               </div>
             </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:8}}>
+                🔗 상담 링크
+                <span style={{fontSize:10,color:'#475569',fontWeight:400,marginLeft:8}}>추가 지시사항에 "링크"를 쓰면 자동 삽입</span>
+              </div>
+              <input value={prompts.link||''} onChange={e=>save({link:e.target.value})} placeholder="https://상담 예약 링크"
+                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'10px 14px',color:'#e2e8f0',fontSize:12,outline:'none'}}/>
+            </div>
             <div style={{marginBottom:24}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:8}}>금지 표현</div>
               <input value={prompts.forbidden} onChange={e=>save({forbidden:e.target.value})} placeholder="예: 저렴한, 싼"
