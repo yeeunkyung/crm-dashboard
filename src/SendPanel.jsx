@@ -367,7 +367,5 @@ export default function SendPanel({ customers, templates, apt, prompts, isAd, se
         </div>
       )}
     </div>
-  </div>
-  </div>
   );
 }
