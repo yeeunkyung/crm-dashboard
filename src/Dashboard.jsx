@@ -561,35 +561,74 @@ function TemplatesTab({ templates, setTemplates, tmplSource, setTmplSource, tmpl
 
       {/* 업로드 카드 */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}}>
+
+        {/* CSV 업로드 */}
         <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:'#94a3b8'}}>📄 CSV 업로드</div>
-          <div style={{fontSize:10,color:'#475569',marginBottom:10,lineHeight:1.6}}>
-            컬럼: <span style={{color:'#a5b4fc'}}>고객 분류</span> / <span style={{color:'#a5b4fc'}}>메시징 템플릿</span>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:10,color:'#e2e8f0'}}>📄 CSV 업로드</div>
+          <div style={{background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:9,padding:'10px 12px',marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:'#a5b4fc',marginBottom:7}}>📋 CSV 컬럼 기준</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              <div style={{display:'flex',gap:7,alignItems:'flex-start'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.12)',padding:'1px 8px',borderRadius:6,flexShrink:0}}>A열</span>
+                <div>
+                  <span style={{fontSize:10,color:'#e2e8f0',fontWeight:600}}>템플릿 제목</span><span style={{fontSize:10,color:'#475569'}}> 또는 </span><span style={{fontSize:10,color:'#e2e8f0',fontWeight:600}}>고객 분류</span>
+                  <div style={{fontSize:9,color:'#64748b',marginTop:2}}>예: 관심 제로 그룹, 즉시 청약 가능 (1순위)</div>
+                </div>
+              </div>
+              <div style={{display:'flex',gap:7,alignItems:'flex-start'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#10b981',background:'rgba(16,185,129,0.12)',padding:'1px 8px',borderRadius:6,flexShrink:0}}>B열</span>
+                <div>
+                  <span style={{fontSize:10,color:'#e2e8f0',fontWeight:600}}>친구톡 내용</span><span style={{fontSize:10,color:'#475569'}}> 또는 </span><span style={{fontSize:10,color:'#e2e8f0',fontWeight:600}}>메시징 템플릿</span>
+                  <div style={{fontSize:9,color:'#64748b',marginTop:2}}>멀티라인은 큰따옴표(" ")로 감싸기</div>
+                </div>
+              </div>
+            </div>
+            <div style={{marginTop:8,paddingTop:7,borderTop:'1px solid rgba(255,255,255,0.06)',fontSize:9,color:'#64748b',lineHeight:1.6}}>
+              💡 <span style={{color:'#94a3b8',fontWeight:600}}>광고 템플릿</span> → 🔄 교체 업로드 · <span style={{color:'#94a3b8',fontWeight:600}}>추천 템플릿</span> → ➕ 추가 업로드
+            </div>
           </div>
-          <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:7}}>
             <button onClick={()=>{ addFileRef.current._mode='replace'; addFileRef.current.click(); }}
-              style={{...btnStyle('#6366f1'), padding:'7px 12px'}}>🔄 교체 업로드</button>
+              style={{...btnStyle('#6366f1'),flex:1,padding:'8px',textAlign:'center'}}>🔄 교체 업로드</button>
             <button onClick={()=>{ addFileRef.current._mode='add'; addFileRef.current.click(); }}
-              style={{...btnStyle('#10b981'), padding:'7px 12px'}}>➕ 추가 업로드</button>
+              style={{...btnStyle('#10b981'),flex:1,padding:'8px',textAlign:'center'}}>➕ 추가 업로드</button>
           </div>
           <input ref={addFileRef} type="file" accept=".csv" style={{display:'none'}}
             onChange={e=>{ handleTmplCSV(e.target.files[0], addFileRef.current._mode||'replace'); e.target.value=''; }}/>
         </div>
+
+        {/* 구글 시트 */}
         <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:'#94a3b8'}}>🟢 구글 시트 연동</div>
-          <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="구글 시트 URL"
+          <div style={{fontSize:12,fontWeight:700,marginBottom:10,color:'#e2e8f0'}}>🟢 구글 시트 연동</div>
+          <div style={{background:'rgba(16,185,129,0.06)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:9,padding:'10px 12px',marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:'#6ee7b7',marginBottom:7}}>📋 시트 컬럼 기준</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              <div style={{display:'flex',gap:7,alignItems:'center'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.12)',padding:'1px 8px',borderRadius:6,flexShrink:0}}>A열</span>
+                <span style={{fontSize:10,color:'#e2e8f0',fontWeight:600}}>템플릿 제목</span><span style={{fontSize:10,color:'#475569',marginLeft:4}}>또는 고객 분류</span>
+              </div>
+              <div style={{display:'flex',gap:7,alignItems:'center'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#10b981',background:'rgba(16,185,129,0.12)',padding:'1px 8px',borderRadius:6,flexShrink:0}}>B열</span>
+                <span style={{fontSize:10,color:'#e2e8f0',fontWeight:600}}>친구톡 내용</span><span style={{fontSize:10,color:'#475569',marginLeft:4}}>또는 메시징 템플릿</span>
+              </div>
+            </div>
+            <div style={{marginTop:8,paddingTop:7,borderTop:'1px solid rgba(255,255,255,0.06)',fontSize:9,color:'#64748b',lineHeight:1.6}}>
+              💡 시트 공유 → <span style={{color:'#94a3b8',fontWeight:600}}>링크 있는 모든 사용자 · 뷰어</span> 로 설정
+            </div>
+          </div>
+          <input value={tmplSheetUrl} onChange={e=>setTmplSheetUrl(e.target.value)} placeholder="구글 시트 URL 붙여넣기"
             style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:11,outline:'none',marginBottom:8,boxSizing:'border-box'}}/>
           <div style={{display:'flex',gap:7}}>
             <button onClick={()=>loadTmplSheet('replace')} disabled={tmplSheetLoading}
-              style={{...btnStyle('#6366f1'),flex:1}}>{tmplSheetLoading?'로딩 중...':'🔄 교체 연동'}</button>
+              style={{...btnStyle('#6366f1'),flex:1,padding:'8px',textAlign:'center'}}>{tmplSheetLoading?'로딩 중...':'🔄 교체 연동'}</button>
             <button onClick={()=>loadTmplSheet('add')} disabled={tmplSheetLoading}
-              style={{...btnStyle('#10b981'),flex:1}}>{tmplSheetLoading?'...':'➕ 추가 연동'}</button>
+              style={{...btnStyle('#10b981'),flex:1,padding:'8px',textAlign:'center'}}>{tmplSheetLoading?'...':'➕ 추가 연동'}</button>
           </div>
           {tmplSheetError&&<div style={{fontSize:11,color:'#f87171',marginTop:6}}>{tmplSheetError}</div>}
         </div>
       </div>
 
-      {/* 템플릿 목록 */}
+      {/* 템플릿 목록 — overflow 없이 전체 펼침 */}
       <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 20px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
           <div style={{fontSize:13,fontWeight:600,color:'#94a3b8'}}>
@@ -601,25 +640,25 @@ function TemplatesTab({ templates, setTemplates, tmplSource, setTmplSource, tmpl
             ＋ 직접 추가
           </button>
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:5}}>
+        <div style={{display:'flex',flexDirection:'column',gap:4}}>
           {templates.map((t,i)=>{
             const isExpanded = expandedId===t.id;
             const isRecommended = t.id>=100 && t.id<=109;
             return (
-              <div key={t.id} style={{background:isRecommended?'rgba(99,102,241,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${isRecommended?'rgba(99,102,241,0.18)':'rgba(255,255,255,0.06)'}`,borderRadius:8,overflow:'hidden'}}>
+              <div key={t.id} style={{background:isRecommended?'rgba(99,102,241,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${isRecommended?'rgba(99,102,241,0.18)':'rgba(255,255,255,0.05)'}`,borderRadius:8}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',userSelect:'none'}} onClick={()=>setExpandedId(isExpanded?null:t.id)}>
-                  <span style={{fontSize:10,color:'#334155',background:'rgba(255,255,255,0.05)',padding:'1px 6px',borderRadius:8,flexShrink:0,minWidth:28,textAlign:'center'}}>#{i+1}</span>
-                  {isRecommended&&<span style={{fontSize:9,color:'#a5b4fc',background:'rgba(99,102,241,0.25)',padding:'1px 7px',borderRadius:8,fontWeight:700,flexShrink:0,letterSpacing:0.3}}>추천</span>}
+                  <span style={{fontSize:10,color:'#334155',background:'rgba(255,255,255,0.05)',padding:'1px 6px',borderRadius:6,flexShrink:0,minWidth:26,textAlign:'center'}}>#{i+1}</span>
+                  {isRecommended&&<span style={{fontSize:9,color:'#a5b4fc',background:'rgba(99,102,241,0.25)',padding:'1px 7px',borderRadius:6,fontWeight:700,flexShrink:0}}>추천</span>}
                   <span style={{fontSize:12,fontWeight:600,color:isRecommended?'#c4b5fd':'#cbd5e1',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</span>
-                  <span style={{fontSize:11,color:'#475569',marginRight:4,flexShrink:0}}>{isExpanded?'▲ 접기':'▼ 펼치기'}</span>
+                  <span style={{fontSize:10,color:'#475569',marginRight:6,flexShrink:0}}>{isExpanded?'▲ 접기':'▼ 펼치기'}</span>
                   <button onClick={e=>{e.stopPropagation();setDeleteConfirm(t.id);}}
-                    style={{padding:'3px 10px',borderRadius:6,border:'1px solid rgba(248,113,113,0.3)',background:'rgba(248,113,113,0.1)',color:'#f87171',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0}}>
+                    style={{padding:'3px 9px',borderRadius:6,border:'1px solid rgba(248,113,113,0.3)',background:'rgba(248,113,113,0.08)',color:'#f87171',cursor:'pointer',fontSize:10,fontWeight:600,flexShrink:0}}>
                     삭제
                   </button>
                 </div>
                 {isExpanded&&(
-                  <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'12px 14px'}}>
-                    <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.85,whiteSpace:'pre-wrap',background:'rgba(0,0,0,0.25)',borderRadius:8,padding:'12px 14px'}}>
+                  <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',padding:'12px 14px'}}>
+                    <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.85,whiteSpace:'pre-wrap',background:'rgba(0,0,0,0.2)',borderRadius:8,padding:'12px 14px'}}>
                       {t.content}
                     </div>
                   </div>
