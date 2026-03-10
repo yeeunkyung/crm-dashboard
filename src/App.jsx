@@ -112,7 +112,7 @@ export default function App() {
       {/* ── 메인 콘텐츠 ── */}
       <div style={{padding:'22px 24px',maxWidth:1400,margin:'0 auto'}}>
 
-        {/* 고객데이터 / 세그먼트 / 아파트 / 템플릿 / 프롬프트 */}
+        {/* 대시보드 및 설정 탭들 */}
         {['data','overview','apt','templates','prompts'].includes(tab)&&(
           <Dashboard
             customers={customers} setCustomers={setCustomers}
@@ -150,10 +150,7 @@ export default function App() {
         {tab==='sent'&&(
           <SentHistory sent={sent} setSent={setSent} />
         )}
-
       </div>
     </div>
-  </div>
-  </div>
   );
 }
