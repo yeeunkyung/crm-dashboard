@@ -522,7 +522,7 @@ function TemplatesTab({ templates, setTemplates, tmplSource, setTmplSource, tmpl
   });
 
   return (
-    <div style={{maxWidth:800}}>
+    <div style={{maxWidth:820,paddingBottom:40}}>
       {/* 추가 모달 */}
       {addModal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -600,25 +600,25 @@ function TemplatesTab({ templates, setTemplates, tmplSource, setTmplSource, tmpl
             ＋ 직접 추가
           </button>
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:520,overflowY:'auto',paddingRight:4}}>
+        <div style={{display:'flex',flexDirection:'column',gap:5}}>
           {templates.map((t,i)=>{
             const isExpanded = expandedId===t.id;
             const isRecommended = t.id>=100 && t.id<=109;
             return (
-              <div key={t.id} style={{background: isRecommended?'rgba(99,102,241,0.06)':'rgba(255,255,255,0.03)', border:`1px solid ${isRecommended?'rgba(99,102,241,0.2)':'rgba(255,255,255,0.07)'}`,borderRadius:9,overflow:'hidden'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer'}} onClick={()=>setExpandedId(isExpanded?null:t.id)}>
-                  <span style={{fontSize:10,color:'#475569',background:'rgba(255,255,255,0.06)',padding:'1px 7px',borderRadius:10,flexShrink:0}}>#{i+1}</span>
-                  {isRecommended&&<span style={{fontSize:9,color:'#a5b4fc',background:'rgba(99,102,241,0.2)',padding:'1px 6px',borderRadius:8,fontWeight:700,flexShrink:0}}>추천</span>}
-                  <span style={{fontSize:12,fontWeight:600,color: isRecommended?'#c4b5fd':'#cbd5e1',flex:1}}>{t.title}</span>
-                  <span style={{fontSize:10,color:'#334155'}}>{isExpanded?'▲':'▼'}</span>
-                  <button onClick={e=>{e.stopPropagation(); setDeleteConfirm(t.id);}}
-                    style={{padding:'3px 10px',borderRadius:7,border:'1px solid rgba(248,113,113,0.25)',background:'rgba(248,113,113,0.08)',color:'#f87171',cursor:'pointer',fontSize:11,flexShrink:0}}>
+              <div key={t.id} style={{background:isRecommended?'rgba(99,102,241,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${isRecommended?'rgba(99,102,241,0.18)':'rgba(255,255,255,0.06)'}`,borderRadius:8,overflow:'hidden'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',userSelect:'none'}} onClick={()=>setExpandedId(isExpanded?null:t.id)}>
+                  <span style={{fontSize:10,color:'#334155',background:'rgba(255,255,255,0.05)',padding:'1px 6px',borderRadius:8,flexShrink:0,minWidth:28,textAlign:'center'}}>#{i+1}</span>
+                  {isRecommended&&<span style={{fontSize:9,color:'#a5b4fc',background:'rgba(99,102,241,0.25)',padding:'1px 7px',borderRadius:8,fontWeight:700,flexShrink:0,letterSpacing:0.3}}>추천</span>}
+                  <span style={{fontSize:12,fontWeight:600,color:isRecommended?'#c4b5fd':'#cbd5e1',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</span>
+                  <span style={{fontSize:11,color:'#475569',marginRight:4,flexShrink:0}}>{isExpanded?'▲ 접기':'▼ 펼치기'}</span>
+                  <button onClick={e=>{e.stopPropagation();setDeleteConfirm(t.id);}}
+                    style={{padding:'3px 10px',borderRadius:6,border:'1px solid rgba(248,113,113,0.3)',background:'rgba(248,113,113,0.1)',color:'#f87171',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0}}>
                     삭제
                   </button>
                 </div>
                 {isExpanded&&(
-                  <div style={{padding:'0 14px 12px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
-                    <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.8,whiteSpace:'pre-line',background:'rgba(0,0,0,0.2)',borderRadius:8,padding:'10px 12px',marginTop:10,maxHeight:220,overflowY:'auto'}}>
+                  <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'12px 14px'}}>
+                    <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.85,whiteSpace:'pre-wrap',background:'rgba(0,0,0,0.25)',borderRadius:8,padding:'12px 14px'}}>
                       {t.content}
                     </div>
                   </div>
