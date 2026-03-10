@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { TEMPLATES, DEFAULT_APT, DEFAULT_PROMPTS, SAMPLE, ALL_GROUPS } from "./constants";
 import Dashboard from "./Dashboard";
-import SendPanel from "./SendPanel";
 import AgentPanel from "./AgentPanel";
 import SentHistory from "./SentHistory";
+import AISendPanel from "./AISendPanel";
 
 const TABS = [
-  {key:'data',    label:'📂 고객데이터'},
-  {key:'overview',label:'📊 세그먼트'},
-  {key:'apt',     label:'🏢 아파트'},
+  {key:'data',     label:'📂 고객데이터'},
+  {key:'overview', label:'📊 세그먼트'},
+  {key:'apt',      label:'🏢 아파트'},
   {key:'templates',label:'📝 템플릿 관리'},
-  {key:'prompts', label:'🤖 AI 프롬프트'},
-  {key:'send',    label:'💬 메시지발송'},
-  {key:'agent',   label:'🤖 AI 에이전트'},
-  {key:'sent',    label:'📋 발송내역'},
+  {key:'aisend',   label:'💬 AI 메시지발송'},
+  {key:'agent',    label:'🤖 AI 에이전트'},
+  {key:'sent',     label:'📋 발송내역'},
 ];
 
 export default function App() {
@@ -24,11 +23,8 @@ export default function App() {
   const [templates, setTemplates] = useState(TEMPLATES);
   const [sent, setSent] = useState([]);
   const [isAd, setIsAd] = useState(false);
-  const [selected, setSelected] = useState(null);
-  const [sendMode, setSendMode] = useState('individual');
-  const [tmplSource, setTmplSource] = useState('default');
-  const [promptSaveStatus, setPromptSaveStatus] = useState('saved');
   const [testPhone, setTestPhone] = useState('');
+  const [tmplSource, setTmplSource] = useState('default');
 
   const groupCounts = ALL_GROUPS.reduce((acc,g)=>{
     acc[g.id]=customers.filter(c=>c.groupId===g.id).length;
@@ -61,7 +57,7 @@ export default function App() {
             ))}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {(tab==='send'||tab==='agent')&&(
+            {(tab==='aisend'||tab==='agent')&&(
               <div style={{display:'flex',alignItems:'center',gap:6,background:'rgba(255,255,255,0.05)',border:`1px solid ${isAd?'rgba(245,158,11,0.4)':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'4px 10px',cursor:'pointer'}}
                 onClick={()=>setIsAd(v=>!v)}>
                 <div style={{width:26,height:14,borderRadius:10,background:isAd?'#f59e0b':'#334155',position:'relative',transition:'background 0.2s',flexShrink:0}}>
@@ -113,27 +109,24 @@ export default function App() {
       <div style={{padding:'22px 24px',maxWidth:1400,margin:'0 auto'}}>
 
         {/* 대시보드 및 설정 탭들 */}
-        {['data','overview','apt','templates','prompts'].includes(tab)&&(
+        {['data','overview','apt','templates'].includes(tab)&&(
           <Dashboard
             customers={customers} setCustomers={setCustomers}
             templates={templates} setTemplates={setTemplates}
             apt={apt} setApt={setApt}
             prompts={prompts} setPrompts={setPrompts}
             tab={tab} setTab={setTab}
-            setSelected={setSelected} setSendMode={setSendMode}
             groupCounts={groupCounts} totalCount={totalCount}
-            promptSaveStatus={promptSaveStatus} setPromptSaveStatus={setPromptSaveStatus}
             tmplSource={tmplSource} setTmplSource={setTmplSource}
           />
         )}
 
-        {/* 메시지 발송 */}
-        {tab==='send'&&(
-          <SendPanel
+        {/* AI 메시지 발송 (통합) */}
+        {tab==='aisend'&&(
+          <AISendPanel
             customers={customers} templates={templates}
-            apt={apt} prompts={prompts}
-            isAd={isAd} sent={sent} setSent={setSent}
-            setTab={setTab}
+            apt={apt} prompts={prompts} setPrompts={setPrompts}
+            isAd={isAd} setSent={setSent}
           />
         )}
 
