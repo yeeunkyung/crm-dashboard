@@ -227,37 +227,134 @@ function SegmentSelector({ customers, selectedIds, onChange }) {
   );
 }
 
+// ── 칩 선택 헬퍼 ─────────────────────────────────────
+function ChipGroup({ chips, value, onSelect, color = '#6366f1', colorBg = 'rgba(99,102,241,0.18)', multi = false }) {
+  const isActive = (chip) => {
+    if (!value) return false;
+    if (multi) return value.includes(chip);
+    return value === chip;
+  };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+      {chips.map(chip => {
+        const active = isActive(chip);
+        return (
+          <button
+            key={chip}
+            onClick={() => {
+              if (multi) {
+                const arr = value ? value.split(', ').map(s => s.trim()).filter(Boolean) : [];
+                const next = arr.includes(chip) ? arr.filter(s => s !== chip) : [...arr, chip];
+                onSelect(next.join(', '));
+              } else {
+                onSelect(active ? '' : chip);
+              }
+            }}
+            style={{
+              padding: '4px 11px', borderRadius: 20, border: `1px solid ${active ? color : 'rgba(255,255,255,0.1)'}`,
+              background: active ? colorBg : 'rgba(255,255,255,0.03)',
+              color: active ? color : '#64748b', fontSize: 11, cursor: 'pointer', fontWeight: active ? 600 : 400,
+              transition: 'all 0.12s',
+            }}
+          >{chip}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── 프롬프트 설정 패널 ────────────────────────────────
 function PromptPanel({ prompts, setPrompts, saveStatus, setSaveStatus }) {
-  const fields = [
-    { key: 'tone',      label: '말투·톤',   placeholder: '예: 친근하고 전문적인' },
-    { key: 'style',     label: '스타일',     placeholder: '예: 간결하고 명확한' },
-    { key: 'length',    label: '길이',       placeholder: '예: 100자 내외' },
-    { key: 'extra',     label: '추가 지시사항', placeholder: '예: 이름 포함, 링크 추가, 서론/본론/결론 구조' },
-    { key: 'forbidden', label: '금지 표현',  placeholder: '예: 과장 표현, 확정적 수익 언급' },
-    { key: 'link',      label: '상담 링크',  placeholder: 'https://...' },
-  ];
+  const update = (key, val) => { setPrompts(p => ({ ...p, [key]: val })); setSaveStatus('unsaved'); };
+
+  const TONE_CHIPS = ['부드럽고 부담 없는', '친근하고 따뜻한', '격식 있고 신뢰감 있는', '적극적이고 설득력 있는', '공감하며 맞춤 제안하는', '간결하고 임팩트 있는'];
+  const STYLE_CHIPS = ['정보 제공형', '행동 유도형', '조건 맞춤형', '혜택 강조형', '긴박감 강조형', '감성 공략형'];
+  const LENGTH_CHIPS = ['80자', '100자', '120자', '150자'];
+  const EXTRA_CHIPS = ['이름 넣어줘', '링크 끝에 붙여줘', '서론/본론/결론 구조로', '청약 일정 강조', '자격 조건 강조', '혜택 위주로'];
+  const FORBIDDEN_CHIPS = ['과장 표현 금지', '확정 수익 언급 금지', '경쟁 부추기는 표현 금지', '부동산 투기 조장 금지'];
 
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#a5b4fc', marginBottom: 12 }}>🤖 AI 프롬프트 설정</div>
-      {fields.map(f => (
-        <div key={f.key} style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>{f.label}</div>
-          <input
-            value={prompts[f.key] || ''}
-            onChange={e => { setPrompts(p => ({ ...p, [f.key]: e.target.value })); setSaveStatus('unsaved'); }}
-            placeholder={f.placeholder}
-            style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 7, padding: '7px 11px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
-          />
-        </div>
-      ))}
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#a5b4fc', marginBottom: 14 }}>🤖 AI 프롬프트 설정</div>
+
+      {/* 말투 / 톤 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>말투 / 톤</div>
+        <ChipGroup chips={TONE_CHIPS} value={prompts.tone} onSelect={v => update('tone', v)} color="#a5b4fc" colorBg="rgba(99,102,241,0.18)" />
+        <input
+          value={prompts.tone || ''}
+          onChange={e => update('tone', e.target.value)}
+          placeholder="직접 입력..."
+          style={{ marginTop: 7, width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
+        />
+      </div>
+
+      {/* 메시지 스타일 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>메시지 스타일</div>
+        <ChipGroup chips={STYLE_CHIPS} value={prompts.style} onSelect={v => update('style', v)} color="#c084fc" colorBg="rgba(168,85,247,0.18)" />
+        <input
+          value={prompts.style || ''}
+          onChange={e => update('style', e.target.value)}
+          placeholder="직접 입력..."
+          style={{ marginTop: 7, width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
+        />
+      </div>
+
+      {/* 목표 글자 수 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>목표 글자 수</div>
+        <ChipGroup chips={LENGTH_CHIPS} value={prompts.length} onSelect={v => update('length', v + ' 내외')} color="#34d399" colorBg="rgba(16,185,129,0.15)" />
+        <input
+          value={prompts.length || ''}
+          onChange={e => update('length', e.target.value)}
+          placeholder="직접 입력 (예: 120자 이내)..."
+          style={{ marginTop: 7, width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
+        />
+      </div>
+
+      {/* 추가 지시사항 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>추가 지시사항 <span style={{ color: '#475569', fontWeight: 400 }}>(복수 선택 가능)</span></div>
+        <ChipGroup chips={EXTRA_CHIPS} value={prompts.extra} onSelect={v => update('extra', v)} color="#f59e0b" colorBg="rgba(245,158,11,0.15)" multi />
+        <input
+          value={prompts.extra || ''}
+          onChange={e => update('extra', e.target.value)}
+          placeholder="직접 입력..."
+          style={{ marginTop: 7, width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
+        />
+      </div>
+
+      {/* 금지 표현 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>금지 표현</div>
+        <ChipGroup chips={FORBIDDEN_CHIPS} value={prompts.forbidden} onSelect={v => update('forbidden', v)} color="#f87171" colorBg="rgba(248,113,113,0.12)" multi />
+        <input
+          value={prompts.forbidden || ''}
+          onChange={e => update('forbidden', e.target.value)}
+          placeholder="직접 입력..."
+          style={{ marginTop: 7, width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
+        />
+      </div>
+
+      {/* 상담 링크 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', marginBottom: 6 }}>상담 링크</div>
+        <input
+          value={prompts.link || ''}
+          onChange={e => update('link', e.target.value)}
+          placeholder="https://..."
+          style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#e2e8f0', fontSize: 11, outline: 'none' }}
+        />
+      </div>
+
       <button
         onClick={() => setSaveStatus('saved')}
         style={{
           width: '100%', padding: '8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
           background: saveStatus === 'saved' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.25)',
           color: saveStatus === 'saved' ? '#10b981' : '#a5b4fc',
+          transition: 'all 0.15s',
         }}
       >
         {saveStatus === 'saved' ? '✅ 저장됨' : '💾 저장하기'}
@@ -429,22 +526,61 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
               {/* 템플릿 선택 */}
               {msgSource === 'template' && (
                 <div>
+                  {/* 그룹별 추천 템플릿 */}
+                  {selectedCustomers.length > 0 && (() => {
+                    // 선택된 고객들의 그룹ID 집합
+                    const uniqueGroups = [...new Set(selectedCustomers.map(c => c.groupId))];
+                    const recs = [];
+                    uniqueGroups.forEach(gid => {
+                      const g = getGroup(gid);
+                      const recIds = TEMPLATE_MAPPING[gid] || [];
+                      recIds.forEach(id => {
+                        const t = templates.find(t => t.id === id);
+                        if (t && !recs.find(r => r.t.id === id)) recs.push({ t, g });
+                      });
+                    });
+                    if (!recs.length) return null;
+                    return (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span>⭐ 그룹 추천 템플릿</span>
+                          <span style={{ color: '#475569', fontWeight: 400 }}>({uniqueGroups.length}개 그룹 기준)</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {recs.slice(0, 4).map(({ t, g }) => (
+                            <div
+                              key={t.id}
+                              className="tmpl-item"
+                              onClick={() => handleSelectTemplate(t)}
+                              style={{
+                                background: selTemplate?.id === t.id ? `${g.color}18` : 'rgba(255,255,255,0.04)',
+                                border: `1px solid ${selTemplate?.id === t.id ? `${g.color}55` : `${g.color}22`}`,
+                                borderRadius: 8, padding: '8px 12px', cursor: 'pointer',
+                                borderLeft: `3px solid ${g.color}`,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                <span style={{ fontSize: 11 }}>{g.icon}</span>
+                                <span style={{ fontSize: 10, color: g.color, fontWeight: 600 }}>{g.short}</span>
+                                {selTemplate?.id === t.id && <span style={{ fontSize: 9, color: g.color, marginLeft: 'auto' }}>✓ 선택됨</span>}
+                              </div>
+                              <div style={{ fontSize: 11, color: selTemplate?.id === t.id ? '#e2e8f0' : '#94a3b8', fontWeight: selTemplate?.id === t.id ? 600 : 400 }}>{t.title}</div>
+                              <div style={{ fontSize: 10, color: '#334155', marginTop: 2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{t.content.slice(0, 50)}...</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '12px 0' }} />
+                        <div style={{ fontSize: 10, color: '#475569', marginBottom: 7 }}>📋 전체 템플릿</div>
+                      </div>
+                    );
+                  })()}
+
                   <input
                     value={tmplSearch}
                     onChange={e => setTmplSearch(e.target.value)}
                     placeholder="🔍 템플릿 검색..."
                     style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, padding: '7px 12px', color: '#e2e8f0', fontSize: 11, outline: 'none', marginBottom: 8 }}
                   />
-                  {selectedCustomers.length > 0 && (() => {
-                    const recIds = TEMPLATE_MAPPING[selectedCustomers[0].groupId] || [];
-                    const recNames = recIds.map(id => templates.find(t => t.id === id)?.title).filter(Boolean).slice(0, 2);
-                    if (!recNames.length) return null;
-                    return (
-                      <div style={{ fontSize: 10, color: '#64748b', marginBottom: 8 }}>
-                        💡 추천: {recNames.join(', ')}
-                      </div>
-                    );
-                  })()}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto', marginBottom: 10 }}>
                     {filteredTemplates.map(t => (
                       <div
