@@ -672,6 +672,26 @@ function TemplatesTab({ templates, setTemplates, tmplSource, setTmplSource, tmpl
   );
 }
 
+function PinnedTemplate({ t, isPrimary }) {
+  const [open, setOpen] = useState(isPrimary); // 대표는 기본 펼침
+  return (
+    <div style={{borderRadius:10,overflow:'hidden',border:isPrimary?'1px solid rgba(99,102,241,0.35)':'1px solid rgba(255,255,255,0.07)',background:isPrimary?'rgba(99,102,241,0.08)':'rgba(255,255,255,0.02)',marginBottom:isPrimary?0:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',userSelect:'none'}} onClick={()=>setOpen(v=>!v)}>
+        {isPrimary&&<span style={{fontSize:9,color:'#a5b4fc',background:'rgba(99,102,241,0.3)',padding:'2px 8px',borderRadius:20,fontWeight:700,flexShrink:0}}>대표 추천</span>}
+        <span style={{fontSize:12,fontWeight:isPrimary?700:500,color:isPrimary?'#c4b5fd':'#94a3b8',flex:1}}>{t.title}</span>
+        <span style={{fontSize:10,color:'#475569',flexShrink:0}}>{open?'▲ 접기':'▼ 펼치기'}</span>
+      </div>
+      {open&&(
+        <div style={{borderTop:`1px solid ${isPrimary?'rgba(99,102,241,0.2)':'rgba(255,255,255,0.05)'}`,padding:'12px 14px'}}>
+          <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.85,whiteSpace:'pre-wrap',background:'rgba(0,0,0,0.2)',borderRadius:8,padding:'12px 14px'}}>
+            {t.content}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, promptSaveStatus, setPromptSaveStatus }) {
   const [selGroup, setSelGroup] = useState(null);
   const TONE_OPTIONS = ['부드럽고 부담 없는','친근하고 따뜻한','격식 있고 신뢰감 있는','적극적이고 설득력 있는','공감하며 맞춤 제안하는','간결하고 임팩트 있는'];
@@ -717,12 +737,31 @@ function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, pro
                 <span style={{fontSize:11,color:promptSaveStatus==='saved'?'#10b981':'#f59e0b',fontWeight:600}}>{promptSaveStatus==='saved'?'✅ 저장완료':'💾 저장 중...'}</span>
               </div>
             </div>
-            <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'12px 16px',marginBottom:20}}>
-              <div style={{fontSize:11,color:'#64748b',fontWeight:600,marginBottom:8}}>■ 이 세그먼트 추천 템플릿</div>
-              <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-                {(TEMPLATE_MAPPING[selGroup.id]||[]).map(id=>{const t=templates.find(x=>x.id===id);return t?(<span key={id} style={{padding:'5px 12px',borderRadius:8,fontSize:11,background:'rgba(99,102,241,0.12)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.25)'}}>{t.title}</span>):null;})}
-              </div>
-            </div>
+            {/* ── 세그먼트 추천 템플릿 고정 ── */}
+            {(()=>{
+              const mappedIds = TEMPLATE_MAPPING[selGroup.id]||[];
+              const mappedTemplates = mappedIds.map(id=>templates.find(x=>x.id===id)).filter(Boolean);
+              if(!mappedTemplates.length) return null;
+              const pinned = mappedTemplates[0]; // 첫 번째 = 대표 추천
+              const others = mappedTemplates.slice(1);
+              return (
+                <div style={{marginBottom:22}}>
+                  <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+                    <span>📌</span> 이 세그먼트 추천 템플릿
+                    <span style={{fontSize:10,color:'#475569',fontWeight:400,marginLeft:4}}>(클릭해서 내용 확인)</span>
+                  </div>
+                  {/* 대표 추천 — 전체 미리보기 */}
+                  <PinnedTemplate t={pinned} isPrimary={true}/>
+                  {/* 추가 추천 */}
+                  {others.length>0&&(
+                    <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:6}}>
+                      {others.map(t=><PinnedTemplate key={t.id} t={t} isPrimary={false}/>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div style={{marginBottom:20}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:10}}>말투 / 톤</div>
               <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{TONE_OPTIONS.map(t=>(<Tag key={t} label={t} active={prompts.tone===t} onClick={()=>save({tone:t})}/>))}</div>
@@ -736,9 +775,22 @@ function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, pro
               <div style={{display:'flex',gap:7}}>{LENGTH_OPTIONS.map(l=>(<Tag key={l} label={l} active={prompts.length===l} onClick={()=>save({length:l})}/>))}</div>
             </div>
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:8}}>추가 지시사항</div>
-              <textarea value={prompts.extra} onChange={e=>save({extra:e.target.value})} placeholder="예: 청약일 반드시 강조"
-                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'10px 14px',color:'#e2e8f0',fontSize:12,lineHeight:1.7,resize:'none',outline:'none',height:70}}/>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <div style={{fontSize:12,color:'#94a3b8',fontWeight:600}}>추가 지시사항</div>
+                <span style={{fontSize:10,color:'#475569',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',padding:'2px 8px',borderRadius:20}}>자유롭게 입력</span>
+              </div>
+              <textarea value={prompts.extra} onChange={e=>save({extra:e.target.value})}
+                placeholder={"예시:\n고객 이름 넣어줘\n마지막에 상담 링크 넣어줘\n서론-본론-결론 구조로 써줘\n청약일 반드시 강조해줘"}
+                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'10px 14px',color:'#e2e8f0',fontSize:12,lineHeight:1.8,resize:'none',outline:'none',height:100}}/>
+              {/* 빠른 추가 태그 */}
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>
+                {['고객 이름 넣어줘','마지막에 상담 링크','서론-본론-결론 구조','청약일 강조','한 줄 임팩트 문구 추가'].map(hint=>(
+                  <button key={hint} onClick={()=>save({extra:(prompts.extra?prompts.extra+'\n':'')+hint})}
+                    style={{padding:'4px 10px',borderRadius:20,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:'#64748b',cursor:'pointer',fontSize:10}}>
+                    + {hint}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{marginBottom:24}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:8}}>금지 표현</div>
