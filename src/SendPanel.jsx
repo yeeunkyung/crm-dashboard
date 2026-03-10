@@ -59,12 +59,54 @@ export default function SendPanel({ customers, templates, apt, prompts, isAd, se
     if(!customer) return;
     setLoading(true); setAiMsg(''); setEditMsg('');
     const g=getGroup(customer.groupId);
-    const prompt=`당신은 청약 분양 전문 마케터입니다. 다음 고객에게 맞춤 문자 메시지를 작성해주세요.\n\n[고객 정보]\n- 이름: ${customer.name}\n- 나이: ${customer.age} / 성별: ${customer.gender}\n- 거주지역: ${customer.region}\n- 세그먼트: ${g.name} (${g.desc})\n- 청약 의사: ${customer.의사||'미확인'}\n- 청약 자격: ${customer.자격||'미확인'}\n\n[아파트 정보]\n- 단지명: ${apt.name}\n- 청약일: ${apt.date}\n- 가격: ${apt.price}\n- 위치: ${apt.location}\n\n[작성 가이드]\n- 말투: ${prompts.tone}\n- 스타일: ${prompts.style}\n- 길이: ${prompts.length}\n- 강조사항: ${prompts.extra}\n- 금지표현: ${prompts.forbidden}\n\n메시지만 작성하세요 (설명 없이):`;
+
+    // 추가 지시사항에서 구조/이름/링크 힌트 자동 파악
+    const extra = prompts.extra||'';
+    const wantsName   = extra.includes('이름') || extra.includes('name');
+    const wantsLink   = extra.includes('링크') || extra.includes('link');
+    const wantsStruct = extra.includes('서론') || extra.includes('구조') || extra.includes('본론');
+    const link        = prompts.link||'https://상담링크.com';
+
+    const structGuide = wantsStruct
+      ? `\n메시지 구조: 서론(인사/관심 유도) → 본론(핵심 정보/혜택) → 결론(행동 유도) 3단 구성으로 작성`
+      : '';
+    const nameGuide   = wantsName
+      ? `\n반드시 메시지 첫 문장에 "${customer.name}님"을 포함시킬 것`
+      : `\n고객 이름(${customer.name}님)을 자연스럽게 1회 이상 포함시킬 것`;
+    const linkGuide   = wantsLink
+      ? `\n메시지 마지막에 상담 링크를 반드시 추가: ${link}`
+      : '';
+
+    const prompt = `당신은 청약 분양 전문 마케터입니다. 다음 고객에게 맞춤 문자 메시지를 작성해주세요.
+
+[고객 정보]
+- 이름: ${customer.name}
+- 나이: ${customer.age} / 성별: ${customer.gender}
+- 거주지역: ${customer.region}
+- 세그먼트: ${g.name} (${g.desc})
+- 청약 의사: ${customer.의사||'미확인'}
+- 청약 자격: ${customer.자격||'미확인'}
+
+[아파트 정보]
+- 단지명: ${apt.name}
+- 청약일: ${apt.date}
+- 가격: ${apt.price}
+- 위치: ${apt.location}
+
+[작성 가이드]
+- 말투: ${prompts.tone}
+- 스타일: ${prompts.style}
+- 길이: ${prompts.length}
+- 추가 지시사항: ${extra||'없음'}
+- 금지표현: ${prompts.forbidden||'없음'}${nameGuide}${structGuide}${linkGuide}
+
+메시지만 작성하세요 (설명, 제목, 따옴표 없이 메시지 본문만):`;
+
     try {
       const res=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,messages:[{role:'user',content:prompt}]}),
       });
       const data=await res.json();
       const msg=data.content?.[0]?.text||'생성 실패';
@@ -76,12 +118,40 @@ export default function SendPanel({ customers, templates, apt, prompts, isAd, se
   const generateBulkAI = async groupId => {
     setBulkAiLoading(true); setBulkAiMsg(''); setBulkEditMsg('');
     const g=groupId?getGroup(groupId):null;
-    const prompt=`당신은 청약 분양 전문 마케터입니다.\n${g?`[${g.name}] 세그먼트 고객들에게`:'전체 고객에게'} 보낼 단체 문자 메시지를 작성해주세요.\n\n[아파트 정보]\n- 단지명: ${apt.name}\n- 청약일: ${apt.date}\n- 가격: ${apt.price}\n\n[작성 가이드]\n- 말투: ${prompts.tone}\n- 스타일: ${prompts.style}\n- 길이: ${prompts.length}\n- 강조사항: ${prompts.extra}\n- 금지표현: ${prompts.forbidden}\n${g?`- 대상 특성: ${g.desc}`:''}\n\n메시지만 작성하세요:`;
+    const extra = prompts.extra||'';
+    const wantsLink   = extra.includes('링크') || extra.includes('link');
+    const wantsStruct = extra.includes('서론') || extra.includes('구조') || extra.includes('본론');
+    const link        = prompts.link||'https://상담링크.com';
+
+    const structGuide = wantsStruct
+      ? `\n메시지 구조: 서론(인사/관심 유도) → 본론(핵심 정보/혜택) → 결론(행동 유도) 3단 구성으로 작성`
+      : '';
+    const linkGuide   = wantsLink
+      ? `\n메시지 마지막에 상담 링크를 반드시 추가: ${link}`
+      : '';
+
+    const prompt = `당신은 청약 분양 전문 마케터입니다.
+${g?`[${g.name}] 세그먼트 고객들에게`:'전체 고객에게'} 보낼 단체 문자 메시지를 작성해주세요.
+
+[아파트 정보]
+- 단지명: ${apt.name}
+- 청약일: ${apt.date}
+- 가격: ${apt.price}
+- 위치: ${apt.location}
+
+[작성 가이드]
+- 말투: ${prompts.tone}
+- 스타일: ${prompts.style}
+- 길이: ${prompts.length}
+- 추가 지시사항: ${extra||'없음'}
+- 금지표현: ${prompts.forbidden||'없음'}${g?`\n- 대상 특성: ${g.desc}`:''}${structGuide}${linkGuide}
+
+메시지만 작성하세요 (설명, 제목, 따옴표 없이 메시지 본문만):`;
     try {
       const res=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,messages:[{role:'user',content:prompt}]}),
       });
       const data=await res.json();
       const msg=data.content?.[0]?.text||'생성 실패';
