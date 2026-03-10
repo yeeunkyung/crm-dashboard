@@ -3,6 +3,8 @@ import { SEGMENTS, ALL_GROUPS, SAMPLE, TEMPLATE_MAPPING, parseCSV, classifyGroup
 
 const GSHEET_API_KEY = import.meta.env.VITE_GSHEET_API_KEY || "";
 
+const REQUIRED_COLS = ['나이','성별','나의거주지역','청약자격','구매목적','청약의사'];
+
 function Field({label,value,onChange,placeholder}){
   return(
     <div style={{marginBottom:12}}>
@@ -14,13 +16,60 @@ function Field({label,value,onChange,placeholder}){
   );
 }
 
+function UploadProgress({ status, fileName, count, error }) {
+  if(status==='idle') return null;
+  if(status==='error') return (
+    <div style={{marginTop:10,padding:'10px 14px',background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:9}}>
+      <div style={{fontSize:12,color:'#f87171',fontWeight:600,marginBottom:2}}>❌ 오류 발생</div>
+      <div style={{fontSize:11,color:'#fca5a5',whiteSpace:'pre-line'}}>{error}</div>
+    </div>
+  );
+  const steps = [{key:'reading',label:'파일 읽는 중'},{key:'done',label:'업로드 완료'}];
+  return (
+    <div style={{marginTop:10,padding:'12px 14px',background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:9}}>
+      {fileName&&<div style={{fontSize:11,color:'#64748b',marginBottom:8}}>📄 {fileName}</div>}
+      <div style={{display:'flex',alignItems:'center'}}>
+        {steps.map((s,i)=>{
+          const isDone = status==='done'||(status==='reading'&&i===0);
+          const isActive = status===s.key;
+          return (
+            <div key={s.key} style={{display:'flex',alignItems:'center',flex:1}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <div style={{width:22,height:22,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,
+                  background:isDone?'rgba(16,185,129,0.2)':isActive?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.06)',
+                  border:`2px solid ${isDone?'#10b981':isActive?'#6366f1':'rgba(255,255,255,0.1)'}`,
+                  color:isDone?'#10b981':isActive?'#a5b4fc':'#475569'}}>
+                  {isDone?'✓':i+1}
+                </div>
+                <span style={{fontSize:11,color:isDone?'#10b981':isActive?'#a5b4fc':'#475569',fontWeight:isDone||isActive?600:400}}>
+                  {isActive&&status==='reading'?'파일 읽는 중...':s.label}
+                </span>
+              </div>
+              {i<steps.length-1&&(
+                <div style={{flex:1,height:2,margin:'0 8px',background:isDone?'rgba(16,185,129,0.3)':'rgba(255,255,255,0.08)',borderRadius:2}}/>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {status==='done'&&count&&(
+        <div style={{marginTop:8,fontSize:12,color:'#10b981',fontWeight:600}}>✅ {count.toLocaleString()}명 로드 완료!</div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard({ customers, setCustomers, templates, apt, setApt, prompts, setPrompts, tab, setTab, setSelected, setSendMode, groupCounts, totalCount, promptSaveStatus, setPromptSaveStatus, tmplSource, setTmplSource, setTemplates }) {
   const [dataSource, setDataSource] = useState('sample');
+  const [csvStatus, setCsvStatus] = useState('idle');
   const [csvError, setCsvError] = useState('');
+  const [csvFileName, setCsvFileName] = useState('');
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetLoading, setSheetLoading] = useState(false);
+  const [sheetStatus, setSheetStatus] = useState('idle');
   const [sheetError, setSheetError] = useState('');
   const [filterGroup, setFilterGroup] = useState(null);
+  const [showColGuide, setShowColGuide] = useState(false);
   const [tmplSheetUrl, setTmplSheetUrl] = useState('');
   const [tmplSheetLoading, setTmplSheetLoading] = useState(false);
   const [tmplSheetError, setTmplSheetError] = useState('');
@@ -29,24 +78,29 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
   const tmplFileRef = useRef();
 
   const filteredCustomers = filterGroup ? customers.filter(c=>c.groupId===filterGroup) : customers;
+  const checkCols = headers => REQUIRED_COLS.filter(c=>!headers.includes(c));
 
   const handleCSV = file => {
     if(!file) return;
-    setCsvError('');
+    setCsvError(''); setCsvStatus('reading'); setCsvFileName(file.name);
     const reader = new FileReader();
     reader.onload = e => {
       try {
+        const firstLine = e.target.result.split('\n')[0];
+        const headers = firstLine.split(',').map(h=>h.trim().replace(/"/g,'').replace(/^\uFEFF/,''));
+        const missing = checkCols(headers);
+        if(missing.length>0){ setCsvError(`필수 컬럼 누락: ${missing.join(', ')}\n아래 컬럼 안내를 확인해주세요.`); setCsvStatus('error'); return; }
         const parsed = parseCSV(e.target.result);
-        if(!parsed.length){setCsvError('데이터를 읽을 수 없어요.');return;}
-        setCustomers(parsed); setDataSource('csv');
-      } catch(err){ setCsvError('파일 오류: '+err.message); }
+        if(!parsed.length){ setCsvError('데이터를 읽을 수 없어요.'); setCsvStatus('error'); return; }
+        setCustomers(parsed); setDataSource('csv'); setCsvStatus('done');
+      } catch(err){ setCsvError('파일 오류: '+err.message); setCsvStatus('error'); }
     };
     reader.readAsText(file,'UTF-8');
   };
 
   const loadSheet = async () => {
     if(!sheetUrl) return;
-    setSheetLoading(true); setSheetError('');
+    setSheetLoading(true); setSheetError(''); setSheetStatus('reading');
     try {
       const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
       if(!match) throw new Error('잘못된 시트 URL 형식');
@@ -56,6 +110,8 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
       if(data.error) throw new Error(data.error.message);
       if(!data.values||data.values.length<2) throw new Error('시트에 데이터가 없습니다.');
       const headers = data.values[0].map(h=>h.trim());
+      const missing = checkCols(headers);
+      if(missing.length>0) throw new Error(`필수 컬럼 누락: ${missing.join(', ')}`);
       const rows = data.values.slice(1).map((row,idx)=>{
         const obj={}; headers.forEach((h,i)=>{obj[h]=row[i]||'';});
         return {
@@ -67,8 +123,8 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
           자격:obj['청약자격']||'', 목적:obj['구매목적']||'', 의사:obj['청약의사']||'',
         };
       }).filter(c=>c.name);
-      setCustomers(rows); setDataSource('sheet');
-    } catch(e){ setSheetError('연동 실패: '+e.message); }
+      setCustomers(rows); setDataSource('sheet'); setSheetStatus('done');
+    } catch(e){ setSheetError(e.message); setSheetStatus('error'); }
     setSheetLoading(false);
   };
 
@@ -78,7 +134,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
     reader.onload = e => {
       try {
         const parsed = parseCSV(e.target.result);
-        if(!parsed.length){setTmplSheetError('데이터를 읽을 수 없어요.');return;}
+        if(!parsed.length){ setTmplSheetError('데이터를 읽을 수 없어요.'); return; }
         const rows = parsed.map((row,idx)=>({
           id:idx,
           title:row['템플릿 제목']||row['title']||`템플릿${idx+1}`,
@@ -109,17 +165,134 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
     setTmplSheetLoading(false);
   };
 
+  // ══════════════════════════════════════════
+  // 고객 데이터 탭
+  // ══════════════════════════════════════════
   if(tab==='data') return (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,maxWidth:1100}}>
+    <div style={{display:'grid',gridTemplateColumns:'420px 1fr',gap:20,maxWidth:1200}}>
 
-      {/* 왼쪽: 고객 목록 */}
+      {/* ── 왼쪽: 데이터 불러오기 ── */}
       <div>
-        {/* 발송 모드 버튼 3개 */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+        {/* 상태 바 */}
+        <div style={{background:'rgba(99,102,241,0.06)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:12,padding:'11px 16px',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <span style={{color:'#a5b4fc',fontWeight:600,fontSize:13}}>현재 {totalCount.toLocaleString()}명 로드됨</span>
+            <span style={{color:'#64748b',marginLeft:10,fontSize:11}}>
+              {dataSource==='csv'?'📄 CSV 파일':dataSource==='sheet'?'🟢 구글 시트':'📋 샘플 데이터'}
+            </span>
+          </div>
+          <button onClick={()=>{setCustomers(SAMPLE);setDataSource('sample');setCsvStatus('idle');setSheetStatus('idle');}}
+            style={{background:'none',border:'1px solid rgba(255,255,255,0.1)',color:'#64748b',padding:'4px 12px',borderRadius:7,cursor:'pointer',fontSize:11}}>
+            샘플로 초기화
+          </button>
+        </div>
+
+        {/* CSV 업로드 */}
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px',marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:12,color:'#e2e8f0'}}>📄 CSV 파일 업로드</div>
+          <div onClick={()=>fileRef.current.click()}
+            onDragOver={e=>e.preventDefault()}
+            onDrop={e=>{e.preventDefault();handleCSV(e.dataTransfer.files[0]);}}
+            style={{border:`2px dashed ${csvStatus==='done'?'rgba(16,185,129,0.4)':csvStatus==='error'?'rgba(248,113,113,0.4)':'rgba(99,102,241,0.3)'}`,
+              borderRadius:10,padding:'22px',textAlign:'center',cursor:'pointer',
+              background:csvStatus==='done'?'rgba(16,185,129,0.05)':csvStatus==='error'?'rgba(248,113,113,0.05)':'rgba(99,102,241,0.03)'}}>
+            <div style={{fontSize:26,marginBottom:6}}>{csvStatus==='done'?'✅':csvStatus==='error'?'❌':'📁'}</div>
+            <div style={{fontSize:12,color:'#64748b',marginBottom:8}}>CSV 파일을 드래그하거나</div>
+            <button style={{background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',padding:'6px 16px',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:600}}>
+              📁 파일 선택
+            </button>
+          </div>
+          <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleCSV(e.target.files[0])}/>
+          <UploadProgress status={csvStatus} fileName={csvFileName} count={csvStatus==='done'?customers.length:null} error={csvError}/>
+
+          {/* 컬럼 안내 토글 */}
+          <div style={{marginTop:12}}>
+            <button onClick={()=>setShowColGuide(v=>!v)}
+              style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:8,padding:'8px 14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:'#94a3b8',fontSize:11}}>
+              <span>📋 CSV 컬럼 설정 안내</span>
+              <span style={{fontSize:10,color:'#475569'}}>{showColGuide?'▲ 닫기':'▼ 펼치기'}</span>
+            </button>
+            {showColGuide&&(
+              <div style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:8,padding:'14px 16px',marginTop:6}}>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:'#f87171',fontWeight:700,marginBottom:7}}>🔴 필수 컬럼 (없으면 분류 불가)</div>
+                  {[
+                    {col:'나이',        vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
+                    {col:'성별',        vals:'남자 / 여자'},
+                    {col:'나의거주지역', vals:'텍스트 (예: 동탄2, 경기 기타)'},
+                    {col:'청약자격',    vals:'1순위 / 특별공급 / 2순위 / 무순위'},
+                    {col:'구매목적',    vals:'실거주 / 투자 / 증여 / 기타'},
+                    {col:'청약의사',    vals:'있다 / 없다 / 조건부'},
+                  ].map(r=>(
+                    <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
+                      <span style={{fontSize:11,fontWeight:700,color:'#f87171',minWidth:90,flexShrink:0}}>{r.col}</span>
+                      <span style={{fontSize:10,color:'#64748b',lineHeight:1.5}}>{r.vals}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:'#f59e0b',fontWeight:700,marginBottom:7}}>🟡 선택 컬럼 (있으면 더 정확)</div>
+                  {[
+                    {col:'이름',     vals:'고객 이름 (없으면 고객1, 고객2...)'},
+                    {col:'연락처',   vals:'전화번호 (SMS 실발송 시 필수)'},
+                    {col:'분양 일정',vals:'알고 있다 / 몰랐다 (그룹1/2 구분용)'},
+                    {col:'비고',     vals:'메모'},
+                  ].map(r=>(
+                    <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
+                      <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',minWidth:90,flexShrink:0}}>{r.col}</span>
+                      <span style={{fontSize:10,color:'#64748b',lineHeight:1.5}}>{r.vals}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{background:'rgba(99,102,241,0.06)',borderRadius:7,padding:'10px 12px'}}>
+                  <div style={{fontSize:10,color:'#6366f1',fontWeight:700,marginBottom:5}}>✅ 자동 분류 기준</div>
+                  <div style={{fontSize:10,color:'#64748b',lineHeight:1.9}}>
+                    청약의사 없다 → 그룹1·2 (분양일정 인지 여부로 구분)<br/>
+                    청약의사 있다 + 1순위 → 그룹3 / 특별공급 → 그룹4<br/>
+                    청약의사 있다 + 2순위 → 그룹5 / 무순위 → 그룹6<br/>
+                    조건부 + 투자·증여 → 그룹9 / 기타 → 그룹10<br/>
+                    조건부 + 실거주 + 20~40대 → 그룹7 / 50대+ → 그룹8
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 구글 시트 연동 */}
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:4,color:'#e2e8f0'}}>🟢 구글 시트 연동</div>
+          <div style={{fontSize:11,color:'#475569',marginBottom:10}}>시트 수정 후 다시 불러오기 하면 실시간 반영</div>
+          <div style={{display:'flex',gap:8,marginBottom:8}}>
+            <input value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:12,outline:'none'}}/>
+            <button onClick={loadSheet} disabled={sheetLoading}
+              style={{padding:'8px 14px',borderRadius:8,border:'none',cursor:sheetLoading?'not-allowed':'pointer',fontSize:12,fontWeight:600,
+                background:sheetLoading?'rgba(99,102,241,0.15)':'rgba(16,185,129,0.2)',
+                color:sheetLoading?'#64748b':'#10b981',flexShrink:0}}>
+              {sheetLoading?'⏳ 불러오는 중':'🔗 불러오기'}
+            </button>
+          </div>
+          <UploadProgress status={sheetStatus} fileName={sheetUrl?'구글 시트':''} count={sheetStatus==='done'?customers.length:null} error={sheetError}/>
+          <div style={{marginTop:10,padding:'10px 12px',background:'rgba(255,255,255,0.02)',borderRadius:8,border:'1px solid rgba(255,255,255,0.06)'}}>
+            <div style={{fontSize:11,color:'#6366f1',fontWeight:600,marginBottom:5}}>설정 방법</div>
+            <div style={{fontSize:10,color:'#475569',lineHeight:1.9}}>
+              1. 구글 시트 → 공유 → <span style={{color:'#94a3b8',fontWeight:600}}>링크 있는 모든 사용자 보기</span><br/>
+              2. Vercel 환경변수에 <span style={{color:'#94a3b8',fontWeight:600}}>VITE_GSHEET_API_KEY</span> 추가<br/>
+              3. 위 필수 컬럼명 그대로 사용할 것
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 오른쪽: 고객 목록 ── */}
+      <div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
           {[
             {key:'individual',label:'👤 개별 발송',desc:'고객 1명씩 선택'},
-            {key:'group',label:'👥 그룹별 발송',desc:'세그먼트 단위 일괄'},
-            {key:'all',label:'📢 전체 발송',desc:`전체 ${totalCount}명`},
+            {key:'group',     label:'👥 그룹별 발송',desc:'세그먼트 단위 일괄'},
+            {key:'all',       label:'📢 전체 발송',desc:`전체 ${totalCount}명`},
           ].map(m=>(
             <button key={m.key} onClick={()=>{setTab('send');setSendMode(m.key);}}
               style={{padding:'12px 10px',borderRadius:11,border:'none',cursor:'pointer',textAlign:'left',
@@ -129,39 +302,43 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
             </button>
           ))}
         </div>
-
-        {/* 아파트 정보 바 */}
-        <div style={{background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:9,padding:'8px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:9,padding:'8px 14px',marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <span style={{fontSize:12,color:'#f59e0b',fontWeight:600}}>🏢 {apt.name}</span>
           <span style={{fontSize:11,color:'#64748b'}}>{apt.date}</span>
         </div>
-
-        {/* 그룹 필터 */}
         <div style={{display:'flex',gap:5,marginBottom:10,flexWrap:'wrap'}}>
-          <button onClick={()=>setFilterGroup(null)} style={{padding:'3px 10px',borderRadius:20,border:'none',cursor:'pointer',fontSize:10,background:!filterGroup?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.06)',color:!filterGroup?'#a5b4fc':'#64748b'}}>
+          <button onClick={()=>setFilterGroup(null)}
+            style={{padding:'3px 10px',borderRadius:20,border:'none',cursor:'pointer',fontSize:10,
+              background:!filterGroup?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.06)',
+              color:!filterGroup?'#a5b4fc':'#64748b'}}>
             전체 ({totalCount})
           </button>
-          {ALL_GROUPS.map(g=>{const cnt=groupCounts[g.id];if(!cnt)return null;return(
-            <button key={g.id} onClick={()=>setFilterGroup(filterGroup===g.id?null:g.id)}
-              style={{padding:'3px 10px',borderRadius:20,border:'none',cursor:'pointer',fontSize:10,background:filterGroup===g.id?`${g.color}30`:'rgba(255,255,255,0.06)',color:filterGroup===g.id?g.color:'#64748b'}}>
-              {g.icon} {g.short} ({cnt})
-            </button>
-          );})}
+          {ALL_GROUPS.map(g=>{
+            const cnt=groupCounts[g.id]; if(!cnt) return null;
+            return(
+              <button key={g.id} onClick={()=>setFilterGroup(filterGroup===g.id?null:g.id)}
+                style={{padding:'3px 10px',borderRadius:20,border:'none',cursor:'pointer',fontSize:10,
+                  background:filterGroup===g.id?`${g.color}30`:'rgba(255,255,255,0.06)',
+                  color:filterGroup===g.id?g.color:'#64748b'}}>
+                {g.icon} {g.short} ({cnt})
+              </button>
+            );
+          })}
         </div>
-
-        {/* 고객 카드 목록 */}
-        <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:580,overflowY:'auto'}}>
-          {filteredCustomers.slice(0,50).map(c=>{
+        <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:600,overflowY:'auto'}}>
+          {filteredCustomers.slice(0,100).map(c=>{
             const g=ALL_GROUPS.find(x=>x.id===c.groupId)||{name:'미분류',color:'#64748b',icon:'❓',short:'미분류'};
             return(
               <div key={c.id}
                 style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:10,padding:'11px 15px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}
                 onClick={()=>{setSelected(c);setTab('send');setSendMode('individual');}}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:30,height:30,borderRadius:8,background:`${g.color}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>{g.icon}</div>
+                  <div style={{width:30,height:30,borderRadius:8,background:`${g.color}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>{g.icon}</div>
                   <div>
-                    <span style={{fontWeight:600,fontSize:13}}>{c.name}</span>
-                    <span style={{fontSize:10,color:g.color,marginLeft:7,background:`${g.color}15`,padding:'1px 7px',borderRadius:10}}>{g.short}</span>
+                    <div>
+                      <span style={{fontWeight:600,fontSize:13}}>{c.name}</span>
+                      <span style={{fontSize:10,color:g.color,marginLeft:7,background:`${g.color}15`,padding:'1px 7px',borderRadius:10}}>{g.short}</span>
+                    </div>
                     <div style={{fontSize:11,color:'#64748b',marginTop:2}}>{c.age} · {c.gender} · {c.region}</div>
                     {c.자격&&<div style={{fontSize:10,color:'#475569',marginTop:1}}>{c.자격} · {c.목적||'-'}</div>}
                   </div>
@@ -170,62 +347,9 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
               </div>
             );
           })}
-          {filteredCustomers.length>50&&<div style={{textAlign:'center',color:'#475569',fontSize:12,padding:'8px'}}>+{filteredCustomers.length-50}명 더 있음</div>}
-        </div>
-      </div>
-
-      {/* 오른쪽: 데이터 불러오기 */}
-      <div>
-        <div style={{background:'rgba(99,102,241,0.06)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:12,padding:'12px 18px',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <div style={{fontSize:13}}>
-            <span style={{color:'#a5b4fc',fontWeight:600}}>현재 {totalCount.toLocaleString()}명 로드됨</span>
-            <span style={{color:'#64748b',marginLeft:10,fontSize:12}}>{dataSource==='csv'?'📄 CSV 파일':dataSource==='sheet'?'🟢 구글 시트':'📋 샘플 데이터'}</span>
-          </div>
-          <button onClick={()=>{setCustomers(SAMPLE);setDataSource('sample');}} style={{background:'none',border:'1px solid rgba(255,255,255,0.1)',color:'#64748b',padding:'4px 12px',borderRadius:7,cursor:'pointer',fontSize:11}}>샘플로 초기화</button>
-        </div>
-
-        {/* CSV 업로드 */}
-        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px',marginBottom:12}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:10,color:'#94a3b8'}}>📄 CSV 파일 업로드</div>
-          <div onClick={()=>fileRef.current.click()}
-            style={{border:'2px dashed rgba(99,102,241,0.3)',borderRadius:10,padding:'24px',textAlign:'center',cursor:'pointer',background:'rgba(99,102,241,0.03)'}}>
-            <div style={{fontSize:28,marginBottom:6}}>📁</div>
-            <div style={{fontSize:12,color:'#64748b',marginBottom:8}}>CSV 파일을 드래그하거나</div>
-            <button style={{background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',padding:'6px 16px',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:600}}>📁 파일 선택</button>
-          </div>
-          <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleCSV(e.target.files[0])}/>
-          {csvError&&<div style={{fontSize:11,color:'#f87171',marginTop:6}}>{csvError}</div>}
-          <div style={{marginTop:10,padding:'10px 12px',background:'rgba(255,255,255,0.02)',borderRadius:8,border:'1px solid rgba(255,255,255,0.06)'}}>
-            <div style={{fontSize:11,color:'#6366f1',fontWeight:600,marginBottom:4}}>✅ 자동 분류 기준</div>
-            <div style={{fontSize:10,color:'#475569',lineHeight:1.8}}>
-              청약의사 없다 → 그룹1·2 / 청약의사 있다 → 그룹3·4·5·6 (자격 기준)<br/>
-              조건부 + 투자/증여 → 그룹9 / 조건부 + 기타 → 그룹10<br/>
-              조건부 + 실거주 + 20~40대 → 그룹7 / 50~60대 → 그룹8
-            </div>
-          </div>
-        </div>
-
-        {/* 구글 시트 연동 */}
-        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'16px 18px'}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:4,color:'#94a3b8'}}>🟢 구글 시트 연동</div>
-          <div style={{fontSize:11,color:'#475569',marginBottom:10}}>시트 수정 후 새로고침 버튼을 클릭하면 실시간 반영</div>
-          <div style={{display:'flex',gap:8,marginBottom:8}}>
-            <input value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..."
-              style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'8px 12px',color:'#e2e8f0',fontSize:12,outline:'none'}}/>
-            <button onClick={loadSheet} disabled={sheetLoading}
-              style={{padding:'8px 14px',borderRadius:8,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,background:'rgba(16,185,129,0.2)',color:'#10b981',flexShrink:0}}>
-              {sheetLoading?'로딩':'🔗 불러오기'}
-            </button>
-          </div>
-          {sheetError&&<div style={{fontSize:11,color:'#f87171',marginBottom:6}}>{sheetError}</div>}
-          <div style={{padding:'10px 12px',background:'rgba(255,255,255,0.02)',borderRadius:8,border:'1px solid rgba(255,255,255,0.06)'}}>
-            <div style={{fontSize:11,color:'#6366f1',fontWeight:600,marginBottom:4}}>설정 방법</div>
-            <div style={{fontSize:10,color:'#475569',lineHeight:1.8}}>
-              1. 구글 시트 → 공유 → <span style={{color:'#94a3b8',fontWeight:600}}>링크 있는 모든 사용자 보기</span><br/>
-              2. Vercel 환경변수에 <span style={{color:'#94a3b8',fontWeight:600}}>VITE_GSHEET_API_KEY</span> 추가<br/>
-              3. 컬럼명: 나이, 성별, 나의거주지역, 청약자격, 구매목적, 청약의사, 분양 일정
-            </div>
-          </div>
+          {filteredCustomers.length>100&&(
+            <div style={{textAlign:'center',color:'#475569',fontSize:12,padding:'8px'}}>+{filteredCustomers.length-100}명 더 있음</div>
+          )}
         </div>
       </div>
     </div>
@@ -340,61 +464,37 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
 
 function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, promptSaveStatus, setPromptSaveStatus }) {
   const [selGroup, setSelGroup] = useState(null);
-
   const TONE_OPTIONS = ['부드럽고 부담 없는','친근하고 따뜻한','격식 있고 신뢰감 있는','적극적이고 설득력 있는','공감하며 맞춤 제안하는','간결하고 임팩트 있는'];
   const STYLE_OPTIONS = ['정보 제공형','행동 유도형','조건 맞춤형','혜택 강조형','긴박감 강조형','감성 공략형'];
   const LENGTH_OPTIONS = ['80자','100자','120자','150자'];
-
-  const save = (patch) => {
-    setPromptSaveStatus('saving');
-    setPrompts(p=>({...p,...patch}));
-    setTimeout(()=>setPromptSaveStatus('saved'),800);
-  };
-
-  const Tag = ({label, active, onClick}) => (
-    <button onClick={onClick}
-      style={{padding:'6px 14px',borderRadius:20,border:'none',cursor:'pointer',fontSize:12,fontWeight:active?600:400,
-        background:active?'rgba(99,102,241,0.35)':'rgba(255,255,255,0.06)',
-        color:active?'#a5b4fc':'#94a3b8',transition:'all 0.15s'}}>
-      {label}
-    </button>
+  const save = patch => { setPromptSaveStatus('saving'); setPrompts(p=>({...p,...patch})); setTimeout(()=>setPromptSaveStatus('saved'),800); };
+  const Tag = ({label,active,onClick}) => (
+    <button onClick={onClick} style={{padding:'6px 14px',borderRadius:20,border:'none',cursor:'pointer',fontSize:12,fontWeight:active?600:400,background:active?'rgba(99,102,241,0.35)':'rgba(255,255,255,0.06)',color:active?'#a5b4fc':'#94a3b8'}}>{label}</button>
   );
-
   return (
     <div style={{display:'grid',gridTemplateColumns:'220px 1fr',gap:0,maxWidth:1000,minHeight:560,borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.08)'}}>
-
-      {/* 왼쪽 세그먼트 사이드바 */}
       <div style={{background:'rgba(255,255,255,0.02)',borderRight:'1px solid rgba(255,255,255,0.08)',padding:'16px 0',overflowY:'auto'}}>
         <div style={{fontSize:10,color:'#475569',fontWeight:700,padding:'0 16px 10px',letterSpacing:1}}>세그먼트 선택</div>
         {SEGMENTS.map(s=>(
           <div key={s.tier}>
-            <div style={{fontSize:10,color:s.tierColor,fontWeight:700,padding:'10px 16px 6px',letterSpacing:0.5}}>{s.tier}차 · {s.tierLabel}</div>
+            <div style={{fontSize:10,color:s.tierColor,fontWeight:700,padding:'10px 16px 6px'}}>{s.tier}차 · {s.tierLabel}</div>
             {s.groups.map(g=>{
-              const cnt=groupCounts[g.id]||0;
               const isSel=selGroup?.id===g.id;
               return(
                 <div key={g.id} onClick={()=>setSelGroup(g)}
-                  style={{display:'flex',alignItems:'center',gap:8,padding:'8px 16px',cursor:'pointer',
-                    background:isSel?`${g.color}18`:'transparent',
-                    borderLeft:isSel?`3px solid ${g.color}`:'3px solid transparent',
-                    transition:'all 0.15s'}}>
+                  style={{display:'flex',alignItems:'center',gap:8,padding:'8px 16px',cursor:'pointer',background:isSel?`${g.color}18`:'transparent',borderLeft:isSel?`3px solid ${g.color}`:'3px solid transparent'}}>
                   <span style={{fontSize:15}}>{g.icon}</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?g.color:'#94a3b8'}}>{g.short}</div>
-                  </div>
-                  <span style={{fontSize:10,color:'#475569'}}>{cnt}명</span>
+                  <div style={{flex:1}}><div style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?g.color:'#94a3b8'}}>{g.short}</div></div>
+                  <span style={{fontSize:10,color:'#475569'}}>{groupCounts[g.id]||0}명</span>
                 </div>
               );
             })}
           </div>
         ))}
       </div>
-
-      {/* 오른쪽 설정 패널 */}
       <div style={{background:'rgba(255,255,255,0.02)',padding:'22px 26px',overflowY:'auto'}}>
         {selGroup ? (
           <>
-            {/* 헤더 */}
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
                 <span style={{fontSize:22}}>{selGroup.icon}</span>
@@ -403,81 +503,39 @@ function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, pro
                   <div style={{fontSize:11,color:'#64748b',marginTop:2}}>{selGroup.desc} · {groupCounts[selGroup.id]||0}명</div>
                 </div>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 14px',borderRadius:9,
-                background:promptSaveStatus==='saved'?'rgba(16,185,129,0.12)':'rgba(245,158,11,0.12)',
-                border:`1px solid ${promptSaveStatus==='saved'?'rgba(16,185,129,0.3)':'rgba(245,158,11,0.3)'}`}}>
-                <span style={{fontSize:11,color:promptSaveStatus==='saved'?'#10b981':'#f59e0b',fontWeight:600}}>
-                  {promptSaveStatus==='saved'?'✅ 저장완료':'💾 저장 중...'}
-                </span>
+              <div style={{padding:'6px 14px',borderRadius:9,background:promptSaveStatus==='saved'?'rgba(16,185,129,0.12)':'rgba(245,158,11,0.12)',border:`1px solid ${promptSaveStatus==='saved'?'rgba(16,185,129,0.3)':'rgba(245,158,11,0.3)'}`}}>
+                <span style={{fontSize:11,color:promptSaveStatus==='saved'?'#10b981':'#f59e0b',fontWeight:600}}>{promptSaveStatus==='saved'?'✅ 저장완료':'💾 저장 중...'}</span>
               </div>
             </div>
-
-            {/* 추천 템플릿 */}
             <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'12px 16px',marginBottom:20}}>
               <div style={{fontSize:11,color:'#64748b',fontWeight:600,marginBottom:8}}>■ 이 세그먼트 추천 템플릿</div>
               <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-                {(TEMPLATE_MAPPING[selGroup.id]||[]).map(id=>{
-                  const t=templates.find(x=>x.id===id);
-                  return t?(
-                    <span key={id} style={{padding:'5px 12px',borderRadius:8,fontSize:11,background:'rgba(99,102,241,0.12)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.25)'}}>{t.title}</span>
-                  ):null;
-                })}
+                {(TEMPLATE_MAPPING[selGroup.id]||[]).map(id=>{const t=templates.find(x=>x.id===id);return t?(<span key={id} style={{padding:'5px 12px',borderRadius:8,fontSize:11,background:'rgba(99,102,241,0.12)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.25)'}}>{t.title}</span>):null;})}
               </div>
             </div>
-
-            {/* 말투/톤 */}
             <div style={{marginBottom:20}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:10}}>말투 / 톤</div>
-              <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-                {TONE_OPTIONS.map(t=>(
-                  <Tag key={t} label={t} active={prompts.tone===t} onClick={()=>save({tone:t})}/>
-                ))}
-              </div>
+              <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{TONE_OPTIONS.map(t=>(<Tag key={t} label={t} active={prompts.tone===t} onClick={()=>save({tone:t})}/>))}</div>
             </div>
-
-            {/* 메시지 스타일 */}
             <div style={{marginBottom:20}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:10}}>메시지 스타일</div>
-              <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-                {STYLE_OPTIONS.map(s=>(
-                  <Tag key={s} label={s} active={prompts.style===s} onClick={()=>save({style:s})}/>
-                ))}
-              </div>
+              <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{STYLE_OPTIONS.map(s=>(<Tag key={s} label={s} active={prompts.style===s} onClick={()=>save({style:s})}/>))}</div>
             </div>
-
-            {/* 목표 글자 수 */}
             <div style={{marginBottom:20}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:10}}>목표 글자 수</div>
-              <div style={{display:'flex',gap:7}}>
-                {LENGTH_OPTIONS.map(l=>(
-                  <Tag key={l} label={l} active={prompts.length===l} onClick={()=>save({length:l})}/>
-                ))}
-              </div>
+              <div style={{display:'flex',gap:7}}>{LENGTH_OPTIONS.map(l=>(<Tag key={l} label={l} active={prompts.length===l} onClick={()=>save({length:l})}/>))}</div>
             </div>
-
-            {/* 추가 지시사항 */}
             <div style={{marginBottom:16}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:8}}>추가 지시사항</div>
-              <textarea value={prompts.extra} onChange={e=>save({extra:e.target.value})}
-                placeholder="예: 청약일 반드시 강조"
+              <textarea value={prompts.extra} onChange={e=>save({extra:e.target.value})} placeholder="예: 청약일 반드시 강조"
                 style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'10px 14px',color:'#e2e8f0',fontSize:12,lineHeight:1.7,resize:'none',outline:'none',height:70}}/>
             </div>
-
-            {/* 금지 표현 */}
             <div style={{marginBottom:24}}>
               <div style={{fontSize:12,color:'#94a3b8',fontWeight:600,marginBottom:8}}>금지 표현</div>
-              <input value={prompts.forbidden} onChange={e=>save({forbidden:e.target.value})}
-                placeholder="예: 저렴한, 싼"
+              <input value={prompts.forbidden} onChange={e=>save({forbidden:e.target.value})} placeholder="예: 저렴한, 싼"
                 style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'10px 14px',color:'#e2e8f0',fontSize:12,outline:'none'}}/>
             </div>
-
-            {/* 저장 버튼 */}
-            <button onClick={()=>save({})}
-              style={{width:'100%',padding:'14px',borderRadius:11,border:'none',cursor:'pointer',
-                fontSize:14,fontWeight:700,
-                background:'linear-gradient(135deg,#6366f1,#a855f7)',color:'white'}}>
-              ✅ 저장완료
-            </button>
+            <button onClick={()=>save({})} style={{width:'100%',padding:'14px',borderRadius:11,border:'none',cursor:'pointer',fontSize:14,fontWeight:700,background:'linear-gradient(135deg,#6366f1,#a855f7)',color:'white'}}>✅ 저장완료</button>
           </>
         ) : (
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:400,color:'#334155',textAlign:'center'}}>
