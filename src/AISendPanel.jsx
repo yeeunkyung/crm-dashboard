@@ -808,7 +808,7 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
                     return (
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <span>⭐ 그룹 고정 추천 메시지</span>
+                          <span>⭐ 추천 메시지</span>
                           <span style={{ color: '#475569', fontWeight: 400 }}>({fixedRecs.length}개 그룹)</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
