@@ -288,44 +288,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
 
       {/* ── 오른쪽: 고객 목록 ── */}
       <div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-          {[
-            {key:'individual',label:'👤 개별 발송',desc:'고객 1명씩 선택'},
-            {key:'group',     label:'👥 그룹별 발송',desc:'세그먼트 단위 일괄'},
-            {key:'all',       label:'📢 전체 발송',desc:`전체 ${totalCount}명`},
-          ].map(m=>(
-            <button key={m.key} onClick={()=>{setTab('send');setSendMode(m.key);}}
-              style={{padding:'12px 10px',borderRadius:11,border:'none',cursor:'pointer',textAlign:'left',
-                background:'rgba(99,102,241,0.15)',borderTop:'2px solid rgba(99,102,241,0.4)'}}>
-              <div style={{fontSize:12,fontWeight:700,color:'#a5b4fc',marginBottom:2}}>{m.label}</div>
-              <div style={{fontSize:10,color:'#475569'}}>{m.desc}</div>
-            </button>
-          ))}
-        </div>
-        <div style={{background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:9,padding:'8px 14px',marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontSize:12,color:'#f59e0b',fontWeight:600}}>🏢 {apt.name}</span>
-          <span style={{fontSize:11,color:'#64748b'}}>{apt.date}</span>
-        </div>
-        <div style={{display:'flex',gap:5,marginBottom:10,flexWrap:'wrap'}}>
-          <button onClick={()=>setFilterGroup(null)}
-            style={{padding:'3px 10px',borderRadius:20,border:'none',cursor:'pointer',fontSize:10,
-              background:!filterGroup?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.06)',
-              color:!filterGroup?'#a5b4fc':'#64748b'}}>
-            전체 ({totalCount})
-          </button>
-          {ALL_GROUPS.map(g=>{
-            const cnt=groupCounts[g.id]; if(!cnt) return null;
-            return(
-              <button key={g.id} onClick={()=>setFilterGroup(filterGroup===g.id?null:g.id)}
-                style={{padding:'3px 10px',borderRadius:20,border:'none',cursor:'pointer',fontSize:10,
-                  background:filterGroup===g.id?`${g.color}30`:'rgba(255,255,255,0.06)',
-                  color:filterGroup===g.id?g.color:'#64748b'}}>
-                {g.icon} {g.short} ({cnt})
-              </button>
-            );
-          })}
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:600,overflowY:'auto'}}>
+        <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:700,overflowY:'auto'}}>
           {filteredCustomers.slice(0,100).map(c=>{
             const g=ALL_GROUPS.find(x=>x.id===c.groupId)||{name:'미분류',color:'#64748b',icon:'❓',short:'미분류'};
             return(
