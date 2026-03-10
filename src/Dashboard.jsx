@@ -169,8 +169,9 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
     reader.onload = e => {
       try {
         const maxId = templates.reduce((m,t)=>Math.max(m,t.id),0);
-        const rows = parseTmplRows(e.target.result, mode==='add' ? maxId+1 : 200);
-        if(!rows.length){ setTmplSheetError('데이터를 읽을 수 없어요. "고객 분류", "메시징 템플릿" 컬럼을 확인해주세요.'); return; }
+        const startId = mode==='add' ? Math.max(maxId+1, 500) : 0;
+        const rows = parseTmplRows(e.target.result, startId);
+        if(!rows.length){ setTmplSheetError('데이터를 읽을 수 없어요. "고객 분류" 또는 "템플릿 제목" 컬럼을 확인해주세요.'); return; }
         if(mode==='add'){
           setTemplates(prev=>[...prev, ...rows]);
         } else {
@@ -193,7 +194,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
       if(data.error) throw new Error(data.error.message);
       const headers = data.values[0].map(h=>h.trim());
       const maxId = templates.reduce((m,t)=>Math.max(m,t.id),0);
-      let nextId = mode==='add' ? maxId+1 : 200;
+      let nextId = mode==='add' ? Math.max(maxId+1, 500) : 0;
       const rows = data.values.slice(1).map((row)=>{
         const obj={}; headers.forEach((h,i)=>{obj[h]=(row[i]||'').trim();});
         const title = obj['고객 분류']||obj['템플릿 제목']||'';
