@@ -355,9 +355,10 @@ async function fetchUnsubscribers() {
 async function generateAIMessage(customer, apt, prompts) {
   const g = getGroup(customer.groupId);
   const extra = prompts.extra || '';
-  const wantsName   = extra.includes('이름') || extra.includes('name');
-  const wantsLink   = extra.includes('링크') || extra.includes('link');
-  const wantsStruct = extra.includes('서론') || extra.includes('구조') || extra.includes('본론');
+  const wantsName      = extra.includes('이름') || extra.includes('name');
+  const wantsLink      = extra.includes('링크') || extra.includes('link');
+  const wantsStruct    = extra.includes('서론') || extra.includes('구조') || extra.includes('본론');
+  const wantsFixedEdit = extra.includes('고정 추천 메시지에서 수정') || extra.includes('고정 메시지에서 수정');
   const link        = prompts.link || 'https://상담링크.com';
   const structGuide = wantsStruct ? `\n메시지 구조: 서론(인사) → 본론(핵심정보/혜택) → 결론(행동유도) 3단 구성으로 작성` : '';
   const nameGuide   = wantsName
@@ -365,7 +366,15 @@ async function generateAIMessage(customer, apt, prompts) {
     : `\n고객 이름(${customer.name}님)을 자연스럽게 1회 이상 포함`;
   const linkGuide   = wantsLink ? `\n마지막에 상담 링크 반드시 추가: ${link}` : '';
 
-  const prompt = `당신은 청약 분양 전문 마케터입니다. 다음 고객에게 맞춤 문자 메시지를 작성해주세요.
+  const fixedMsg = GROUP_FIXED_MESSAGES[customer.groupId];
+  const baseContent = wantsFixedEdit && fixedMsg
+    ? `\n\n[기반 고정 메시지 — 이 내용을 기초로 수정해주세요]\n${fixedMsg.content}`
+    : '';
+  const fixedGuide = wantsFixedEdit && fixedMsg
+    ? `\n위의 [기반 고정 메시지]를 토대로, 아래 가이드에 맞게 개선·수정하세요. 구조와 핵심 내용은 유지하되 말투·표현·개인화를 다듬어주세요.`
+    : '';
+
+  const prompt = `당신은 청약 분양 전문 마케터입니다. 다음 고객에게 맞춤 문자 메시지를 작성해주세요.${baseContent}
 
 [고객 정보]
 - 이름: ${customer.name} / 나이: ${customer.age} / 성별: ${customer.gender}
@@ -376,7 +385,7 @@ async function generateAIMessage(customer, apt, prompts) {
 [아파트 정보]
 - 단지명: ${apt.name} / 청약일: ${apt.date} / 가격: ${apt.price} / 위치: ${apt.location}
 
-[작성 가이드]
+[작성 가이드]${fixedGuide}
 - 말투: ${prompts.tone} / 스타일: ${prompts.style} / 길이: ${prompts.length}
 - 추가 지시사항: ${extra || '없음'}
 - 금지표현: ${prompts.forbidden || '없음'}${nameGuide}${structGuide}${linkGuide}
@@ -585,7 +594,7 @@ function PromptPanel({ prompts, setPrompts, saveStatus, setSaveStatus }) {
   const TONE_CHIPS = ['부드럽고 부담 없는', '친근하고 따뜻한', '격식 있고 신뢰감 있는', '적극적이고 설득력 있는', '공감하며 맞춤 제안하는', '간결하고 임팩트 있는'];
   const STYLE_CHIPS = ['정보 제공형', '행동 유도형', '조건 맞춤형', '혜택 강조형', '긴박감 강조형', '감성 공략형'];
   const LENGTH_CHIPS = ['80자', '100자', '120자', '150자'];
-  const EXTRA_CHIPS = ['이름 넣어줘', '링크 끝에 붙여줘', '서론/본론/결론 구조로', '청약 일정 강조', '자격 조건 강조', '혜택 위주로'];
+  const EXTRA_CHIPS = ['이름 넣어줘', '링크 끝에 붙여줘', '서론/본론/결론 구조로', '청약 일정 강조', '자격 조건 강조', '혜택 위주로', '그룹 고정 추천 메시지에서 수정해줘'];
   const FORBIDDEN_CHIPS = ['과장 표현 금지', '확정 수익 언급 금지', '경쟁 부추기는 표현 금지', '부동산 투기 조장 금지'];
 
   return (
