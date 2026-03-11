@@ -210,7 +210,7 @@ function CustomerAddForm({ customers, setCustomers }) {
                 const ALL_GROUPS_LOCAL = [
                   {id:1,short:'관심 제로'},{id:2,short:'관심 가능'},{id:3,short:'즉시청약1순위'},{id:4,short:'즉시청약특별'},
                   {id:5,short:'청약가능2순위'},{id:6,short:'무순위가능'},{id:7,short:'MZ주거'},{id:8,short:'시니어주거'},
-                  {id:9,short:'자산증식'},{id:10,short:'잠재수요'},
+                  {id:9,short:'전략투자자'},{id:10,short:'정보탐색'},
                 ];
                 return ALL_GROUPS_LOCAL.find(g=>g.id===getGroup())?.short || '미분류';
               })()}
