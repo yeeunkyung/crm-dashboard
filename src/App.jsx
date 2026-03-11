@@ -23,12 +23,10 @@ export default function App() {
   const [customers, setCustomers] = useState(SAMPLE);
   const [templates, setTemplates] = useState(TEMPLATES);
   const [sent, setSent] = useState([]);
-  const [isAd, setIsAd] = useState(false);
   const [selected, setSelected] = useState(null);
   const [sendMode, setSendMode] = useState('individual');
   const [tmplSource, setTmplSource] = useState('default');
   const [promptSaveStatus, setPromptSaveStatus] = useState('saved');
-  const [testPhone, setTestPhone] = useState('');
 
   const groupCounts = ALL_GROUPS.reduce((acc,g)=>{
     acc[g.id]=customers.filter(c=>c.groupId===g.id).length;
@@ -70,7 +68,6 @@ export default function App() {
       {/* ── 메인 콘텐츠 ── */}
       <div style={{padding:'22px 24px',maxWidth:1400,margin:'0 auto'}}>
 
-        {/* 대시보드 및 설정 탭들 */}
         {['data','overview','apt','templates','prompts'].includes(tab)&&(
           <Dashboard
             customers={customers} setCustomers={setCustomers}
@@ -85,26 +82,23 @@ export default function App() {
           />
         )}
 
-        {/* 메시지 발송 */}
         {tab==='send'&&(
           <SendPanel
             customers={customers} templates={templates}
             apt={apt} prompts={prompts}
-            isAd={isAd} sent={sent} setSent={setSent}
+            sent={sent} setSent={setSent}
             setTab={setTab}
           />
         )}
 
-        {/* AI 에이전트 */}
         {tab==='agent'&&(
           <AgentPanel
             customers={customers} templates={templates}
             apt={apt} prompts={prompts}
-            isAd={isAd} setSent={setSent}
+            setSent={setSent}
           />
         )}
 
-        {/* 발송내역 */}
         {tab==='sent'&&(
           <SentHistory sent={sent} setSent={setSent} />
         )}
