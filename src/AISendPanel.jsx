@@ -294,6 +294,7 @@ async function makeSolapiAuth() {
   const signature = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
   return { apiKey, date, salt, signature };
 }
+// 발송 요청 — messageId 반환
 async function sendSMS(to, text) {
   const sender = import.meta.env.VITE_SOLAPI_SENDER || '';
   const { apiKey, date, salt, signature } = await makeSolapiAuth();
@@ -303,25 +304,34 @@ async function sendSMS(to, text) {
     body: JSON.stringify({ message: { to: to.replace(/-/g, ''), from: sender, text } }),
   });
   const data = await res.json();
-
-  // HTTP 에러 (인증 실패, 서버 오류 등)
   if (!res.ok) throw new Error(data.errorMessage || data.message || `HTTP ${res.status}`);
-
-  // Solapi는 200 OK 이면서도 failedMessageList에 실패를 담아 반환함
-  const failed = data.failedMessageList;
-  if (failed && failed.length > 0) {
-    const reason = failed[0]?.errorCode
-      ? `${failed[0].errorCode}: ${failed[0].errorMessage || '발송 실패'}`
-      : (failed[0]?.errorMessage || '발송 실패');
-    throw new Error(reason);
+  if (data.failedMessageList?.length > 0) {
+    const f = data.failedMessageList[0];
+    throw new Error(`${f.errorCode || ''}: ${f.errorMessage || '발송 실패'}`);
   }
+  const messageId = data.messageId || data.messages?.[0]?.messageId || null;
+  return { messageId };
+}
 
-  // 성공 메시지가 0건인 경우
-  if (data.groupInfo?.count?.total === 0) {
-    throw new Error('발송된 메시지 없음 (수신번호 오류 가능성)');
+// 실제 상태 조회 — 최대 10초 폴링 (Solapi는 비동기로 상태 확정)
+async function checkSMSStatus(messageId) {
+  if (!messageId) return null;
+  for (let i = 0; i < 5; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const { apiKey, date, salt, signature } = await makeSolapiAuth();
+      const res = await fetch(`https://api.solapi.com/messages/v4/list?messageId=${messageId}`, {
+        headers: { 'Authorization': `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}` },
+      });
+      const data = await res.json();
+      const msg = data.messageList?.[0];
+      if (!msg) continue;
+      const s = msg.statusCode || msg.status || '';
+      if (s === 'COMPLETE') return { realStatus: 'success', errorCode: '', errorMsg: '' };
+      if (s === 'FAILED' || s === 'CANCEL') return { realStatus: 'fail', errorCode: msg.errorCode || s, errorMsg: msg.errorMessage || '전송 실패' };
+    } catch { /* 계속 */ }
   }
-
-  return data;
+  return null; // 10초 내 확정 안 됨
 }
 
 // ── AI 메시지 생성 ────────────────────────────────────
@@ -718,31 +728,51 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
     for (const c of selectedCustomers) {
       const g = getGroup(c.groupId);
       const msgToSend = applyAdPrefix(finalMsg, localIsAd);
-      let success = false;
-      let noPhone = false;
+      let status = 'noPhone';
       let errorMsg = '';
-      try {
-        if (c.phone && c.phone.length >= 10) {
-          await sendSMS(c.phone, msgToSend);
-          success = true;
-          addLog(`✅ ${c.name} (${c.phone}) 발송 성공`, '#10b981');
-        } else {
-          noPhone = true;
-          addLog(`📋 ${c.name} 내역 저장 (번호 없음)`, '#f59e0b');
+      let messageId = null;
+
+      if (!c.phone || c.phone.length < 10) {
+        addLog(`📋 ${c.name} 내역 저장 (번호 없음)`, '#f59e0b');
+        status = 'noPhone';
+      } else {
+        try {
+          addLog(`📤 ${c.name} (${c.phone}) 발송 요청 중...`, '#94a3b8');
+          const res = await sendSMS(c.phone, msgToSend);
+          messageId = res.messageId;
+          addLog(`⏳ ${c.name} 발송 요청 완료 — 실제 전달 상태 확인 중...`, '#f59e0b');
+          // 폴링으로 실제 상태 확인
+          const checked = await checkSMSStatus(messageId);
+          if (checked) {
+            status = checked.realStatus;
+            errorMsg = checked.errorMsg ? `${checked.errorCode} ${checked.errorMsg}` : '';
+            if (status === 'success') {
+              addLog(`✅ ${c.name} 실제 발송 성공 확인`, '#10b981');
+            } else {
+              addLog(`❌ ${c.name} 발송 실패 — ${errorMsg}`, '#f87171');
+            }
+          } else {
+            // 10초 내 확정 안 된 경우 → pending
+            status = 'pending';
+            addLog(`⏳ ${c.name} 발송 확인 중 (Solapi 대시보드 최종 확인 권장)`, '#f59e0b');
+          }
+        } catch (e) {
+          status = 'fail';
+          errorMsg = e.message;
+          addLog(`❌ ${c.name} 실패: ${e.message}`, '#f87171');
         }
-      } catch (e) {
-        errorMsg = e.message;
-        addLog(`❌ ${c.name} 실패: ${e.message}`, '#f87171');
       }
+
       setSent(prev => [{
         customer: c, message: msgToSend, group: g,
         apt: apt.name,
         date: dateStr, time: timeStr, datetime: fullDatetime,
         label: msgSource === 'template' ? (selTemplate?.title || '템플릿') : 'AI 자동생성',
-        status: noPhone ? 'noPhone' : success ? 'success' : 'fail',
+        status,
         errorMsg,
+        messageId,
       }, ...prev]);
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 200));
     }
 
     addLog(`🎉 완료! ${selectedCustomers.length}명 처리`, '#10b981');
