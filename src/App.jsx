@@ -23,6 +23,7 @@ export default function App() {
   const [templates, setTemplates] = useState(TEMPLATES);
   const [sent, setSent] = useState([]);
   const [tmplSource, setTmplSource] = useState('default');
+  const [promptSaveStatus, setPromptSaveStatus] = useState('saved');
 
   const groupCounts = ALL_GROUPS.reduce((acc,g)=>{
     acc[g.id]=customers.filter(c=>c.groupId===g.id).length;
@@ -73,6 +74,7 @@ export default function App() {
             tab={tab} setTab={setTab}
             groupCounts={groupCounts} totalCount={totalCount}
             tmplSource={tmplSource} setTmplSource={setTmplSource}
+            promptSaveStatus={promptSaveStatus} setPromptSaveStatus={setPromptSaveStatus}
           />
         )}
 
