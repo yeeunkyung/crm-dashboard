@@ -3,7 +3,7 @@ import { SEGMENTS, ALL_GROUPS, SAMPLE, TEMPLATE_MAPPING, parseCSV, classifyGroup
 
 const GSHEET_API_KEY = import.meta.env.VITE_GSHEET_API_KEY || "";
 
-const REQUIRED_COLS = ['청약의사','청약 자격','구매목적','분양 일정 인지'];
+const REQUIRED_COLS = ['청약의사','청약자격','구매목적','분양일정'];
 
 function Field({label,value,onChange,placeholder}){
   return(
@@ -440,10 +440,10 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:'#f87171',fontWeight:700,marginBottom:7}}>🔴 필수 컬럼 (없으면 분류 불가)</div>
                   {[
-                    {col:'청약의사',       vals:'있다 / 없다 / 조건부'},
-                    {col:'청약 자격',      vals:'1순위 / 특별공급 / 2순위 / 무순위'},
-                    {col:'구매목적',       vals:'실거주 / 투자 / 증여 / 기타'},
-                    {col:'분양 일정 인지', vals:'알고 있다. / 몰랐다. (그룹1/2 구분용)'},
+                    {col:'청약의사',    vals:'있다 / 없다 / 조건부'},
+                    {col:'청약자격',    vals:'1순위 / 특별공급 / 2순위 / 무순위'},
+                    {col:'구매목적',    vals:'실거주 / 투자 / 증여 / 기타'},
+                    {col:'분양일정',    vals:'알고 있다. / 몰랐다. (그룹1/2 구분용)'},
                   ].map(r=>(
                     <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
                       <span style={{fontSize:11,fontWeight:700,color:'#f87171',minWidth:110,flexShrink:0}}>{r.col}</span>
@@ -454,13 +454,13 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:'#f59e0b',fontWeight:700,marginBottom:7}}>🟡 선택 컬럼 (있으면 더 정확)</div>
                   {[
-                    {col:'고객 이름',               vals:'고객 이름 (없으면 고객1, 고객2...)'},
-                    {col:'고객 연락처 (테스트 발송)', vals:'전화번호 (SMS 실발송 시 필수)'},
-                    {col:'나이',                    vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
-                    {col:'성별',                    vals:'남자 / 여자'},
-                    {col:'나의 거주 지역',            vals:'텍스트 (예: 동탄2, 경기 기타)'},
-                    {col:'마케팅 수신동의',           vals:'동의 / 거부'},
-                    {col:'비고',                    vals:'메모'},
+                    {col:'이름',          vals:'고객 이름 (없으면 고객1, 고객2...)'},
+                    {col:'연락처',         vals:'전화번호 (SMS 실발송 시 필수)'},
+                    {col:'나이',           vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
+                    {col:'성별',           vals:'남자 / 여자'},
+                    {col:'나의 거주 지역', vals:'텍스트 (예: 동탄2, 경기 기타)'},
+                    {col:'마케팅 수신동의', vals:'동의 / 거부'},
+                    {col:'비고',           vals:'메모'},
                   ].map(r=>(
                     <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
                       <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',minWidth:110,flexShrink:0}}>{r.col}</span>
