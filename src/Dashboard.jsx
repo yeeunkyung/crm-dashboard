@@ -3,7 +3,7 @@ import { SEGMENTS, ALL_GROUPS, SAMPLE, TEMPLATE_MAPPING, parseCSV, classifyGroup
 
 const GSHEET_API_KEY = import.meta.env.VITE_GSHEET_API_KEY || "";
 
-const REQUIRED_COLS = ['*나이','*청약의사','*청약 자격','*구매목적'];
+const REQUIRED_COLS = ['청약의사','청약 자격','구매목적','분양 일정 인지'];
 
 function Field({label,value,onChange,placeholder}){
   return(
@@ -165,7 +165,7 @@ function CustomerAddForm({ customers, setCustomers }) {
 
           {/* 나이 */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*나이</div>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*>나이</div>
             {chips('age', AGE_OPTS, '#f87171')}
           </div>
           {/* 성별 */}
@@ -181,27 +181,27 @@ function CustomerAddForm({ customers, setCustomers }) {
           </div>
           {/* 청약의사 */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*청약의사</div>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*>청약의사</div>
             {chips('의사', 의사_OPTS, '#6366f1')}
           </div>
           {/* 청약자격 */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*청약 자격</div>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*>청약 자격</div>
             {chips('자격', 자격_OPTS, '#a855f7')}
           </div>
           {/* 구매목적 */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*구매목적</div>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*>구매목적</div>
             {chips('목적', 목적_OPTS, '#f59e0b')}
           </div>
           {/* 분양 일정 인지 */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>*분양 일정 인지</div>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>*>분양 일정 인지</div>
             {chips('분양', 분양_OPTS, '#10b981')}
           </div>
           {/* 마케팅 수신동의 */}
           <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>*마케팅 수신동의</div>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>*>마케팅 수신동의</div>
             {chips('marketing', MARKETING_OPTS, '#06b6d4')}
           </div>
 
@@ -251,7 +251,8 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
   const tmplFileRef = useRef();
 
   const filteredCustomers = filterGroup ? customers.filter(c=>c.groupId===filterGroup) : customers;
-  const checkCols = headers => REQUIRED_COLS.filter(c=>!headers.includes(c));
+  const normalizeHeader = h => h.trim().replace(/"/g,'').replace(/^\uFEFF/,'').replace(/^\*/,'');
+  const checkCols = headers => REQUIRED_COLS.filter(c=>!headers.map(normalizeHeader).includes(c));
 
   const handleCSV = file => {
     if(!file) return;
@@ -286,14 +287,19 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
       const missing = checkCols(headers);
       if(missing.length>0) throw new Error(`필수 컬럼 누락: ${missing.join(', ')}`);
       const rows = data.values.slice(1).map((row,idx)=>{
-        const obj={}; headers.forEach((h,i)=>{obj[h]=row[i]||'';});
+        const obj={}; headers.forEach((h,i)=>{obj[h]=row[i]||''; obj[normalizeHeader(h)]=row[i]||'';});
         return {
-          id:idx+1, name:obj['이름']||obj['고객명']||`고객${idx+1}`,
+          id:idx+1,
+          name:obj['고객 이름']||obj['이름']||obj['고객명']||`고객${idx+1}`,
           age:obj['나이']||'-', gender:obj['성별']||'-',
-          region:obj['나의거주지역']||obj['지역']||'-',
-          phone:(obj['연락처']||'').replace(/-/g,''),
+          region:obj['나의 거주 지역']||obj['나의거주지역']||obj['지역']||'-',
+          phone:(obj['고객 연락처 (테스트 발송)']||obj['연락처']||'').replace(/-/g,''),
           groupId:classifyGroup(obj), memo:obj['비고']||'',
-          자격:obj['청약자격']||'', 목적:obj['구매목적']||'', 의사:obj['청약의사']||'',
+          marketing:obj['마케팅 수신동의']||'',
+          자격:obj['청약 자격']||obj['청약자격']||'',
+          목적:obj['구매목적']||'',
+          의사:obj['청약의사']||'',
+          분양:obj['분양 일정 인지']||'',
         };
       }).filter(c=>c.name);
       setCustomers(rows); setDataSource('sheet'); setSheetStatus('done');
@@ -434,12 +440,10 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:'#f87171',fontWeight:700,marginBottom:7}}>🔴 필수 컬럼 (없으면 분류 불가)</div>
                   {[
-                    {col:'*나이',            vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
-                    {col:'성별',             vals:'남자 / 여자'},
-                    {col:'나의 거주 지역',    vals:'텍스트 (예: 동탄2, 경기 기타)'},
-                    {col:'*청약 자격',        vals:'1순위 / 특별공급 / 2순위 / 무순위'},
-                    {col:'*구매목적',         vals:'실거주 / 투자 / 증여 / 기타'},
-                    {col:'*청약의사',         vals:'있다 / 없다 / 조건부'},
+                    {col:'청약의사',       vals:'있다 / 없다 / 조건부'},
+                    {col:'청약 자격',      vals:'1순위 / 특별공급 / 2순위 / 무순위'},
+                    {col:'구매목적',       vals:'실거주 / 투자 / 증여 / 기타'},
+                    {col:'분양 일정 인지', vals:'알고 있다. / 몰랐다. (그룹1/2 구분용)'},
                   ].map(r=>(
                     <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
                       <span style={{fontSize:11,fontWeight:700,color:'#f87171',minWidth:110,flexShrink:0}}>{r.col}</span>
@@ -450,10 +454,12 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:'#f59e0b',fontWeight:700,marginBottom:7}}>🟡 선택 컬럼 (있으면 더 정확)</div>
                   {[
-                    {col:'고객 이름',              vals:'고객 이름 (없으면 고객1, 고객2...)'},
+                    {col:'고객 이름',               vals:'고객 이름 (없으면 고객1, 고객2...)'},
                     {col:'고객 연락처 (테스트 발송)', vals:'전화번호 (SMS 실발송 시 필수)'},
-                    {col:'*분양 일정 인지',          vals:'알고 있다. / 몰랐다. (그룹1/2 구분용)'},
-                    {col:'*마케팅 수신동의',          vals:'동의 / 거부'},
+                    {col:'나이',                    vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
+                    {col:'성별',                    vals:'남자 / 여자'},
+                    {col:'나의 거주 지역',            vals:'텍스트 (예: 동탄2, 경기 기타)'},
+                    {col:'마케팅 수신동의',           vals:'동의 / 거부'},
                     {col:'비고',                    vals:'메모'},
                   ].map(r=>(
                     <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
