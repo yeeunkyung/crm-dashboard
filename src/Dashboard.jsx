@@ -572,7 +572,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
 
   if(tab==='overview') {
     // 1차/2차/3차 세그먼트만 상단 카드에 표시 (테스트 제외)
-    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차','4차'].includes(s.tier));
+    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차'].includes(s.tier));
     const tierTotals = mainSegments.map(s=>({
       ...s,
       total: s.groups.reduce((sum,g)=>sum+(groupCounts[g.id]||0),0),
