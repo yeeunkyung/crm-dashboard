@@ -11,8 +11,8 @@ const TABS = [
   {key:'apt',       label:'🏢 아파트'},
   {key:'templates', label:'📝 템플릿 관리'},
   {key:'aisend',    label:'💬 AI 메시지발송'},
-  {key:'agent',     label:'🤖 AI 에이전트'},
   {key:'sent',      label:'📋 발송내역'},
+  {key:'agent',     label:'🤖 AI 에이전트', highlight: true},
 ];
 
 export default function App() {
@@ -48,9 +48,9 @@ export default function App() {
           <div style={{display:'flex',gap:2,flexWrap:'wrap'}}>
             {TABS.map(t=>(
               <button key={t.key} onClick={()=>setTab(t.key)}
-                style={{padding:'5px 10px',borderRadius:7,border:'none',cursor:'pointer',fontSize:11,fontWeight:500,
-                  background:tab===t.key?'rgba(99,102,241,0.35)':'transparent',
-                  color:tab===t.key?'#a5b4fc':'#94a3b8'}}>
+                style={{padding:'5px 10px',borderRadius:7,border:t.highlight?'1px solid rgba(251,191,36,0.5)':'none',cursor:'pointer',fontSize:11,fontWeight:500,
+                  background:tab===t.key?(t.highlight?'rgba(251,191,36,0.3)':'rgba(99,102,241,0.35)'):(t.highlight?'rgba(251,191,36,0.1)':'transparent'),
+                  color:tab===t.key?(t.highlight?'#fbbf24':'#a5b4fc'):(t.highlight?'#fbbf24':'#94a3b8')}}>
                 {t.label}
               </button>
             ))}
