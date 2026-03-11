@@ -3,6 +3,10 @@ import { SEGMENTS, ALL_GROUPS, SAMPLE, TEMPLATE_MAPPING, parseCSV, classifyGroup
 
 const GSHEET_API_KEY = import.meta.env.VITE_GSHEET_API_KEY || "";
 
+// 세그먼트 표시명 오버라이드
+const SHORT_LABEL_MAP = {'거절·관망':'관심 제로','관심도':'관심 가능'};
+const shortLabel = g => SHORT_LABEL_MAP[g.short] || g.short;
+
 const REQUIRED_COLS = ['나이','성별','나의거주지역','청약자격','구매목적','청약의사'];
 
 function Field({label,value,onChange,placeholder}){
@@ -344,7 +348,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                   <div>
                     <div>
                       <span style={{fontWeight:600,fontSize:13}}>{c.name}</span>
-                      <span style={{fontSize:10,color:g.color,marginLeft:7,background:`${g.color}15`,padding:'1px 7px',borderRadius:10}}>{g.short}</span>
+                      <span style={{fontSize:10,color:g.color,marginLeft:7,background:`${g.color}15`,padding:'1px 7px',borderRadius:10}}>{shortLabel(g)}</span>
                     </div>
                     <div style={{fontSize:11,color:'#64748b',marginTop:2}}>{c.age} · {c.gender} · {c.region}</div>
                     {c.자격&&<div style={{fontSize:10,color:'#475569',marginTop:1}}>{c.자격} · {c.목적||'-'}</div>}
@@ -363,8 +367,8 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
   );
 
   if(tab==='overview') {
-    // 1차/2차/3차 세그먼트만 상단 카드에 표시 (테스트 제외)
-    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차','4차'].includes(s.tier));
+    // 1차/2차/3차만 표시 (4차 테스트 제외)
+    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차'].includes(s.tier));
     const tierTotals = mainSegments.map(s=>({
       ...s,
       total: s.groups.reduce((sum,g)=>sum+(groupCounts[g.id]||0),0),
@@ -391,7 +395,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                   <div key={g.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
                     <div style={{display:'flex',alignItems:'center',gap:7}}>
                       <span style={{fontSize:14}}>{g.icon}</span>
-                      <span style={{fontSize:11,color:'#cbd5e1'}}>{g.short}</span>
+                      <span style={{fontSize:11,color:'#cbd5e1'}}>{shortLabel(g)}</span>
                     </div>
                     <span style={{fontSize:13,fontWeight:700,color:g.color}}>{cnt.toLocaleString()}명</span>
                   </div>
@@ -413,7 +417,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
               const pct=(cnt/grandTotal)*100;
               if(!pct) return null;
               return(
-                <div key={g.id} title={`${g.short}: ${pct.toFixed(1)}%`}
+                <div key={g.id} title={`${shortLabel(g)}: ${pct.toFixed(1)}%`}
                   style={{width:`${pct}%`,background:g.color,transition:'width 0.5s',minWidth:pct>0.5?2:0}}/>
               );
             })}
@@ -426,7 +430,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
               return(
                 <div key={g.id} style={{display:'flex',alignItems:'center',gap:5}}>
                   <div style={{width:8,height:8,borderRadius:'50%',background:g.color,flexShrink:0}}/>
-                  <span style={{fontSize:10,color:'#64748b'}}>{g.short} {pct}%</span>
+                  <span style={{fontSize:10,color:'#64748b'}}>{shortLabel(g)} {pct}%</span>
                 </div>
               );
             })}
@@ -714,7 +718,7 @@ function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, pro
                 <div key={g.id} onClick={()=>setSelGroup(g)}
                   style={{display:'flex',alignItems:'center',gap:8,padding:'8px 16px',cursor:'pointer',background:isSel?`${g.color}18`:'transparent',borderLeft:isSel?`3px solid ${g.color}`:'3px solid transparent'}}>
                   <span style={{fontSize:15}}>{g.icon}</span>
-                  <div style={{flex:1}}><div style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?g.color:'#94a3b8'}}>{g.short}</div></div>
+                  <div style={{flex:1}}><div style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?g.color:'#94a3b8'}}>{shortLabel(g)}</div></div>
                   <span style={{fontSize:10,color:'#475569'}}>{groupCounts[g.id]||0}명</span>
                 </div>
               );
