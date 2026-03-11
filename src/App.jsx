@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { TEMPLATES, DEFAULT_APT, DEFAULT_PROMPTS, SAMPLE, ALL_GROUPS } from "./constants";
 import Dashboard from "./Dashboard";
-import SendPanel from "./SendPanel";
+import AISendPanel from "./AISendPanel";
 import AgentPanel from "./AgentPanel";
 import SentHistory from "./SentHistory";
 
 const TABS = [
-  {key:'data',    label:'📂 고객데이터'},
-  {key:'overview',label:'📊 세그먼트'},
-  {key:'apt',     label:'🏢 아파트'},
-  {key:'templates',label:'📝 템플릿 관리'},
-  {key:'prompts', label:'🤖 AI 프롬프트'},
-  {key:'send',    label:'💬 메시지발송'},
-  {key:'agent',   label:'🤖 AI 에이전트'},
-  {key:'sent',    label:'📋 발송내역'},
+  {key:'data',      label:'📂 고객데이터'},
+  {key:'overview',  label:'📊 세그먼트'},
+  {key:'apt',       label:'🏢 아파트'},
+  {key:'templates', label:'📝 템플릿 관리'},
+  {key:'aisend',    label:'💬 AI 메시지발송'},
+  {key:'agent',     label:'🤖 AI 에이전트'},
+  {key:'sent',      label:'📋 발송내역'},
 ];
 
 export default function App() {
@@ -23,10 +22,7 @@ export default function App() {
   const [customers, setCustomers] = useState(SAMPLE);
   const [templates, setTemplates] = useState(TEMPLATES);
   const [sent, setSent] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [sendMode, setSendMode] = useState('individual');
   const [tmplSource, setTmplSource] = useState('default');
-  const [promptSaveStatus, setPromptSaveStatus] = useState('saved');
 
   const groupCounts = ALL_GROUPS.reduce((acc,g)=>{
     acc[g.id]=customers.filter(c=>c.groupId===g.id).length;
@@ -68,26 +64,23 @@ export default function App() {
       {/* ── 메인 콘텐츠 ── */}
       <div style={{padding:'22px 24px',maxWidth:1400,margin:'0 auto'}}>
 
-        {['data','overview','apt','templates','prompts'].includes(tab)&&(
+        {['data','overview','apt','templates'].includes(tab)&&(
           <Dashboard
             customers={customers} setCustomers={setCustomers}
             templates={templates} setTemplates={setTemplates}
             apt={apt} setApt={setApt}
             prompts={prompts} setPrompts={setPrompts}
             tab={tab} setTab={setTab}
-            setSelected={setSelected} setSendMode={setSendMode}
             groupCounts={groupCounts} totalCount={totalCount}
-            promptSaveStatus={promptSaveStatus} setPromptSaveStatus={setPromptSaveStatus}
             tmplSource={tmplSource} setTmplSource={setTmplSource}
           />
         )}
 
-        {tab==='send'&&(
-          <SendPanel
+        {tab==='aisend'&&(
+          <AISendPanel
             customers={customers} templates={templates}
-            apt={apt} prompts={prompts}
-            sent={sent} setSent={setSent}
-            setTab={setTab}
+            apt={apt} prompts={prompts} setPrompts={setPrompts}
+            setSent={setSent}
           />
         )}
 
