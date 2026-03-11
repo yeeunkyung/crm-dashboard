@@ -75,25 +75,21 @@ function CustomerAddForm({ customers, setCustomers }) {
   const MARKETING_OPTS = ['동의','거부'];
 
   const getGroup = () => {
-    const row = { '*청약의사':form.의사, '*청약 자격':form.자격, '*구매목적':form.목적, '*나이':form.나이||form.age, '*분양 일정 인지':form.분양 };
-    const { classifyGroup } = { classifyGroup: (r) => {
-      const 의사=(r['*청약의사']||'').trim();
-      const 자격=(r['*청약 자격']||'').trim();
-      const 목적=(r['*구매목적']||'').trim();
-      const 나이=(r['*나이']||'').trim();
-      const 분양=(r['*분양 일정 인지']||'').trim();
-      if(의사==='없다') return (분양.includes('모른')||분양.includes('몰랐'))?1:2;
-      if(의사==='있다'){
-        if(자격.includes('1순위')) return 3;
-        if(자격.includes('특별공급')) return 4;
-        if(자격.includes('2순위')) return 5;
-        return 6;
-      }
-      if(목적.includes('투자')||목적.includes('증여')) return 9;
-      if(목적.includes('기타')) return 10;
-      return ['20대','30대','40대'].includes(나이)?7:8;
-    }};
-    return classifyGroup(row);
+    const 의사 = (form.의사||'').trim();
+    const 자격 = (form.자격||'').trim();
+    const 목적 = (form.목적||'').trim();
+    const 나이 = (form.나이||form.age||'').trim();
+    const 분양 = (form.분양||'').trim();
+    if(의사==='없다') return (분양.includes('모른')||분양.includes('몰랐'))?1:2;
+    if(의사==='있다'){
+      if(자격.includes('1순위')) return 3;
+      if(자격.includes('특별공급')) return 4;
+      if(자격.includes('2순위')) return 5;
+      return 6;
+    }
+    if(목적.includes('투자')||목적.includes('증여')) return 9;
+    if(목적.includes('기타')) return 10;
+    return ['20대','30대','40대'].includes(나이)?7:8;
   };
 
   const handleAdd = () => {
