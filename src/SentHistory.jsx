@@ -4,6 +4,7 @@ const STATUS_META = {
   success: { label: '발송 성공', color: '#10b981', bg: 'rgba(16,185,129,0.12)', icon: '✅' },
   fail:    { label: '발송 실패', color: '#f87171', bg: 'rgba(248,113,113,0.12)', icon: '❌' },
   noPhone: { label: '번호 없음', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  icon: '📋' },
+  pending: { label: '확인 중',   color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', icon: '⏳' },
 };
 
 export default function SentHistory({ sent, setSent }) {
@@ -31,6 +32,7 @@ export default function SentHistory({ sent, setSent }) {
   const success = sent.filter(i => i.status === 'success').length;
   const fail    = sent.filter(i => i.status === 'fail').length;
   const noPhone = sent.filter(i => i.status === 'noPhone').length;
+  const pending = sent.filter(i => i.status === 'pending').length;
 
   // 그룹 목록 (발송된 그룹만)
   const groups = [...new Map(sent.map(i => [i.group?.id, i.group])).values()].filter(Boolean);
@@ -61,6 +63,7 @@ export default function SentHistory({ sent, setSent }) {
               { label: '발송 성공', value: success, color: '#10b981', bg: 'rgba(16,185,129,0.1)',   key: 'success' },
               { label: '발송 실패', value: fail,    color: '#f87171', bg: 'rgba(248,113,113,0.1)',  key: 'fail'    },
               { label: '번호 없음', value: noPhone, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',   key: 'noPhone' },
+              { label: '확인 중',   value: pending, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)',  key: 'pending' },
             ].map(s => (
               <div key={s.key} onClick={() => setFilter(f => f === s.key ? 'all' : s.key)}
                 style={{
@@ -109,7 +112,7 @@ export default function SentHistory({ sent, setSent }) {
                   <div style={{ fontSize: 11, color: '#334155' }}>{byDate[date].length}건</div>
                   <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }}/>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {['success','fail','noPhone'].map(s => {
+                    {['success','fail','noPhone','pending'].map(s => {
                       const cnt = byDate[date].filter(i => i.status === s).length;
                       if (!cnt) return null;
                       const m = STATUS_META[s];
