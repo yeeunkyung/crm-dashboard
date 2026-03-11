@@ -3,11 +3,7 @@ import { SEGMENTS, ALL_GROUPS, SAMPLE, TEMPLATE_MAPPING, parseCSV, classifyGroup
 
 const GSHEET_API_KEY = import.meta.env.VITE_GSHEET_API_KEY || "";
 
-// 세그먼트 표시명 오버라이드
-const SHORT_LABEL_MAP = {'거절·관망':'관심 제로','관심도':'관심 가능'};
-const shortLabel = g => SHORT_LABEL_MAP[g.short] || g.short;
-
-const REQUIRED_COLS = ['나이','성별','나의거주지역','청약자격','구매목적','청약의사'];
+const REQUIRED_COLS = ['*나이','*청약의사','*청약 자격','*구매목적'];
 
 function Field({label,value,onChange,placeholder}){
   return(
@@ -58,6 +54,179 @@ function UploadProgress({ status, fileName, count, error }) {
       </div>
       {status==='done'&&count&&(
         <div style={{marginTop:8,fontSize:12,color:'#10b981',fontWeight:600}}>✅ {count.toLocaleString()}명 로드 완료!</div>
+      )}
+    </div>
+  );
+}
+
+// ── 고객 추가 폼 컴포넌트 ─────────────────────────────
+function CustomerAddForm({ customers, setCustomers }) {
+  const [open, setOpen] = useState(false);
+  const BLANK = { name:'', phone:'', age:'', gender:'', region:'', 자격:'', 목적:'', 의사:'', 분양:'', marketing:'', memo:'' };
+  const [form, setForm] = useState(BLANK);
+  const [err, setErr] = useState('');
+
+  const AGE_OPTS = ['20대','30대','40대','50대','60대 이상'];
+  const GENDER_OPTS = ['남자','여자'];
+  const 자격_OPTS = ['1순위','특별공급','2순위','무순위'];
+  const 목적_OPTS = ['실거주','실거주+투자','투자','증여','기타'];
+  const 의사_OPTS = ['있다','없다','조건부'];
+  const 분양_OPTS = ['알고 있다.','몰랐다.'];
+  const MARKETING_OPTS = ['동의','거부'];
+
+  const getGroup = () => {
+    const row = { '*청약의사':form.의사, '*청약 자격':form.자격, '*구매목적':form.목적, '*나이':form.나이||form.age, '*분양 일정 인지':form.분양 };
+    const { classifyGroup } = { classifyGroup: (r) => {
+      const 의사=(r['*청약의사']||'').trim();
+      const 자격=(r['*청약 자격']||'').trim();
+      const 목적=(r['*구매목적']||'').trim();
+      const 나이=(r['*나이']||'').trim();
+      const 분양=(r['*분양 일정 인지']||'').trim();
+      if(의사==='없다') return (분양.includes('모른')||분양.includes('몰랐'))?1:2;
+      if(의사==='있다'){
+        if(자격.includes('1순위')) return 3;
+        if(자격.includes('특별공급')) return 4;
+        if(자격.includes('2순위')) return 5;
+        return 6;
+      }
+      if(목적.includes('투자')||목적.includes('증여')) return 9;
+      if(목적.includes('기타')) return 10;
+      return ['20대','30대','40대'].includes(나이)?7:8;
+    }};
+    return classifyGroup(row);
+  };
+
+  const handleAdd = () => {
+    if(!form.의사) { setErr('청약의사를 선택해주세요'); return; }
+    if(!form.age)  { setErr('나이를 선택해주세요'); return; }
+    setErr('');
+    const newId = Date.now();
+    const newCustomer = {
+      id: newId,
+      name: form.name || `고객${customers.length + 1}`,
+      phone: form.phone.replace(/-/g,''),
+      age: form.age,
+      gender: form.gender || '-',
+      region: form.region || '-',
+      groupId: getGroup(),
+      memo: form.memo,
+      marketing: form.marketing,
+      자격: form.자격,
+      목적: form.목적,
+      의사: form.의사,
+      분양: form.분양,
+    };
+    setCustomers(prev => [newCustomer, ...prev]);
+    setForm(BLANK);
+    setOpen(false);
+  };
+
+  const sel = (key, val) => setForm(f => ({ ...f, [key]: f[key]===val ? '' : val }));
+  const chips = (key, opts, color='#6366f1') => (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:4 }}>
+      {opts.map(o => (
+        <button key={o} onClick={() => sel(key, o)}
+          style={{ padding:'3px 10px', borderRadius:20, border:`1px solid ${form[key]===o?color:'rgba(255,255,255,0.1)'}`,
+            background: form[key]===o ? `${color}25` : 'rgba(255,255,255,0.03)',
+            color: form[key]===o ? color : '#64748b', fontSize:10, cursor:'pointer', fontWeight: form[key]===o?700:400 }}>
+          {o}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{ marginBottom:14 }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ width:'100%', padding:'10px 16px', borderRadius:12, border:'1px solid rgba(99,102,241,0.3)',
+          background: open ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
+          color:'#a5b4fc', fontSize:12, fontWeight:700, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <span>➕ 고객 직접 추가</span>
+        <span style={{ fontSize:11, color:'#475569' }}>{open ? '▲ 닫기' : '▼ 펼치기'}</span>
+      </button>
+
+      {open && (
+        <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(99,102,241,0.2)', borderRadius:12, padding:'16px 18px', marginTop:6 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+            {/* 이름 */}
+            <div>
+              <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600, marginBottom:4 }}>고객 이름</div>
+              <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="이름 (선택)"
+                style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:7, padding:'6px 10px', color:'#e2e8f0', fontSize:11, outline:'none' }} />
+            </div>
+            {/* 연락처 */}
+            <div>
+              <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600, marginBottom:4 }}>연락처 📱</div>
+              <input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="010-0000-0000"
+                style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:7, padding:'6px 10px', color:'#e2e8f0', fontSize:11, outline:'none' }} />
+            </div>
+          </div>
+
+          {/* 나이 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*나이</div>
+            {chips('age', AGE_OPTS, '#f87171')}
+          </div>
+          {/* 성별 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>성별</div>
+            {chips('gender', GENDER_OPTS)}
+          </div>
+          {/* 거주 지역 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600, marginBottom:4 }}>나의 거주 지역</div>
+            <input value={form.region} onChange={e=>setForm(f=>({...f,region:e.target.value}))} placeholder="예: 동탄2, 경기 기타, 서울"
+              style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:7, padding:'6px 10px', color:'#e2e8f0', fontSize:11, outline:'none' }} />
+          </div>
+          {/* 청약의사 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*청약의사</div>
+            {chips('의사', 의사_OPTS, '#6366f1')}
+          </div>
+          {/* 청약자격 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*청약 자격</div>
+            {chips('자격', 자격_OPTS, '#a855f7')}
+          </div>
+          {/* 구매목적 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#f87171', fontWeight:700 }}>*구매목적</div>
+            {chips('목적', 목적_OPTS, '#f59e0b')}
+          </div>
+          {/* 분양 일정 인지 */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>*분양 일정 인지</div>
+            {chips('분양', 분양_OPTS, '#10b981')}
+          </div>
+          {/* 마케팅 수신동의 */}
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>*마케팅 수신동의</div>
+            {chips('marketing', MARKETING_OPTS, '#06b6d4')}
+          </div>
+
+          {err && <div style={{ fontSize:11, color:'#f87171', marginBottom:8 }}>⚠️ {err}</div>}
+
+          {/* 미리보기 */}
+          {form.의사 && form.age && (
+            <div style={{ background:'rgba(99,102,241,0.08)', borderRadius:8, padding:'8px 12px', marginBottom:12, fontSize:10, color:'#a5b4fc' }}>
+              📌 예상 그룹: {(() => {
+                const ALL_GROUPS_LOCAL = [
+                  {id:1,short:'관심 제로'},{id:2,short:'관심 가능'},{id:3,short:'즉시청약1순위'},{id:4,short:'즉시청약특별'},
+                  {id:5,short:'청약가능2순위'},{id:6,short:'무순위가능'},{id:7,short:'MZ주거'},{id:8,short:'시니어주거'},
+                  {id:9,short:'자산증식'},{id:10,short:'잠재수요'},
+                ];
+                return ALL_GROUPS_LOCAL.find(g=>g.id===getGroup())?.short || '미분류';
+              })()}
+            </div>
+          )}
+
+          <button onClick={handleAdd}
+            style={{ width:'100%', padding:'10px', borderRadius:9, border:'none', cursor:'pointer',
+              background:'linear-gradient(135deg,#6366f1,#a855f7)', color:'white', fontSize:12, fontWeight:700 }}>
+            ➕ 고객 추가
+          </button>
+        </div>
       )}
     </div>
   );
@@ -265,15 +434,15 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:'#f87171',fontWeight:700,marginBottom:7}}>🔴 필수 컬럼 (없으면 분류 불가)</div>
                   {[
-                    {col:'나이',        vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
-                    {col:'성별',        vals:'남자 / 여자'},
-                    {col:'나의거주지역', vals:'텍스트 (예: 동탄2, 경기 기타)'},
-                    {col:'청약자격',    vals:'1순위 / 특별공급 / 2순위 / 무순위'},
-                    {col:'구매목적',    vals:'실거주 / 투자 / 증여 / 기타'},
-                    {col:'청약의사',    vals:'있다 / 없다 / 조건부'},
+                    {col:'*나이',            vals:'20대 / 30대 / 40대 / 50대 / 60대 이상'},
+                    {col:'성별',             vals:'남자 / 여자'},
+                    {col:'나의 거주 지역',    vals:'텍스트 (예: 동탄2, 경기 기타)'},
+                    {col:'*청약 자격',        vals:'1순위 / 특별공급 / 2순위 / 무순위'},
+                    {col:'*구매목적',         vals:'실거주 / 투자 / 증여 / 기타'},
+                    {col:'*청약의사',         vals:'있다 / 없다 / 조건부'},
                   ].map(r=>(
                     <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
-                      <span style={{fontSize:11,fontWeight:700,color:'#f87171',minWidth:90,flexShrink:0}}>{r.col}</span>
+                      <span style={{fontSize:11,fontWeight:700,color:'#f87171',minWidth:110,flexShrink:0}}>{r.col}</span>
                       <span style={{fontSize:10,color:'#64748b',lineHeight:1.5}}>{r.vals}</span>
                     </div>
                   ))}
@@ -281,13 +450,14 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:'#f59e0b',fontWeight:700,marginBottom:7}}>🟡 선택 컬럼 (있으면 더 정확)</div>
                   {[
-                    {col:'이름',     vals:'고객 이름 (없으면 고객1, 고객2...)'},
-                    {col:'연락처',   vals:'전화번호 (SMS 실발송 시 필수)'},
-                    {col:'분양 일정',vals:'알고 있다 / 몰랐다 (그룹1/2 구분용)'},
-                    {col:'비고',     vals:'메모'},
+                    {col:'고객 이름',              vals:'고객 이름 (없으면 고객1, 고객2...)'},
+                    {col:'고객 연락처 (테스트 발송)', vals:'전화번호 (SMS 실발송 시 필수)'},
+                    {col:'*분양 일정 인지',          vals:'알고 있다. / 몰랐다. (그룹1/2 구분용)'},
+                    {col:'*마케팅 수신동의',          vals:'동의 / 거부'},
+                    {col:'비고',                    vals:'메모'},
                   ].map(r=>(
                     <div key={r.col} style={{display:'flex',gap:8,marginBottom:5}}>
-                      <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',minWidth:90,flexShrink:0}}>{r.col}</span>
+                      <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',minWidth:110,flexShrink:0}}>{r.col}</span>
                       <span style={{fontSize:10,color:'#64748b',lineHeight:1.5}}>{r.vals}</span>
                     </div>
                   ))}
@@ -334,41 +504,69 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
         </div>
       </div>
 
-      {/* ── 오른쪽: 고객 목록 ── */}
+      {/* ── 오른쪽: 고객 목록 + 추가/삭제 ── */}
       <div>
-        <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:700,overflowY:'auto'}}>
-          {filteredCustomers.slice(0,100).map(c=>{
-            const g=ALL_GROUPS.find(x=>x.id===c.groupId)||{name:'미분류',color:'#64748b',icon:'❓',short:'미분류'};
-            return(
-              <div key={c.id}
-                style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:10,padding:'11px 15px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}
-                onClick={()=>{setSelected(c);setTab('send');setSendMode('individual');}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:30,height:30,borderRadius:8,background:`${g.color}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>{g.icon}</div>
-                  <div>
-                    <div>
-                      <span style={{fontWeight:600,fontSize:13}}>{c.name}</span>
-                      <span style={{fontSize:10,color:g.color,marginLeft:7,background:`${g.color}15`,padding:'1px 7px',borderRadius:10}}>{shortLabel(g)}</span>
+        {/* 고객 추가 폼 */}
+        <CustomerAddForm customers={customers} setCustomers={setCustomers} />
+
+        {/* 고객 목록 */}
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'14px 16px'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#94a3b8'}}>
+              👥 고객 목록
+              <span style={{marginLeft:8,fontSize:11,color:'#6366f1',fontWeight:600}}>{customers.length.toLocaleString()}명</span>
+            </div>
+            {customers.filter(c=>c.id!==99).length>0&&(
+              <button
+                onClick={()=>{if(window.confirm('전체 고객을 삭제하시겠어요?')) setCustomers(prev=>prev.filter(c=>c.id===99));}}
+                style={{background:'none',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',padding:'3px 10px',borderRadius:7,cursor:'pointer',fontSize:10}}>
+                전체 삭제
+              </button>
+            )}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:600,overflowY:'auto'}}>
+            {filteredCustomers.slice(0,200).map(c=>{
+              const g=ALL_GROUPS.find(x=>x.id===c.groupId)||{name:'미분류',color:'#64748b',icon:'❓',short:'미분류'};
+              return(
+                <div key={c.id}
+                  style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:9,padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:9,flex:1,minWidth:0}}>
+                    <div style={{width:28,height:28,borderRadius:7,background:`${g.color}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{g.icon}</div>
+                    <div style={{minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                        <span style={{fontWeight:600,fontSize:12}}>{c.name}</span>
+                        <span style={{fontSize:9,color:g.color,background:`${g.color}15`,padding:'1px 6px',borderRadius:10}}>{g.short}</span>
+                        {c.marketing&&<span style={{fontSize:9,color:c.marketing.includes('동의')?'#10b981':'#64748b',background:'rgba(255,255,255,0.05)',padding:'1px 6px',borderRadius:10}}>{c.marketing.includes('동의')?'📧동의':'📵거부'}</span>}
+                      </div>
+                      <div style={{fontSize:10,color:'#64748b',marginTop:1}}>{c.age} · {c.gender} · {c.region}</div>
+                      <div style={{fontSize:10,color:'#475569',marginTop:1}}>{c.자격||'-'} · {c.목적||'-'} · {c.phone?'📱 '+c.phone.replace(/(\d{3})(\d{4})(\d{4})/,'$1-$2-$3'):'번호없음'}</div>
                     </div>
-                    <div style={{fontSize:11,color:'#64748b',marginTop:2}}>{c.age} · {c.gender} · {c.region}</div>
-                    {c.자격&&<div style={{fontSize:10,color:'#475569',marginTop:1}}>{c.자격} · {c.목적||'-'}</div>}
                   </div>
+                  {c.id!==99&&(
+                    <button
+                      onClick={()=>setCustomers(prev=>prev.filter(x=>x.id!==c.id))}
+                      style={{background:'none',border:'1px solid rgba(248,113,113,0.25)',color:'#f87171',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,flexShrink:0,marginLeft:8}}>
+                      삭제
+                    </button>
+                  )}
                 </div>
-                <span style={{fontSize:11,color:'#6366f1',flexShrink:0}}>선택 →</span>
-              </div>
-            );
-          })}
-          {filteredCustomers.length>100&&(
-            <div style={{textAlign:'center',color:'#475569',fontSize:12,padding:'8px'}}>+{filteredCustomers.length-100}명 더 있음</div>
-          )}
+              );
+            })}
+            {filteredCustomers.length>200&&(
+              <div style={{textAlign:'center',color:'#475569',fontSize:11,padding:'8px'}}>+{filteredCustomers.length-200}명 더 있음</div>
+            )}
+            {filteredCustomers.length===0&&(
+              <div style={{textAlign:'center',color:'#334155',fontSize:12,padding:'40px'}}>고객 데이터가 없습니다</div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 
   if(tab==='overview') {
-    // 1차/2차/3차만 표시 (4차 테스트 제외)
-    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차'].includes(s.tier));
+    // 1차/2차/3차 세그먼트만 상단 카드에 표시 (테스트 제외)
+    const mainSegments = SEGMENTS.filter(s=>['1차','2차','3차','4차'].includes(s.tier));
     const tierTotals = mainSegments.map(s=>({
       ...s,
       total: s.groups.reduce((sum,g)=>sum+(groupCounts[g.id]||0),0),
@@ -395,7 +593,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
                   <div key={g.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
                     <div style={{display:'flex',alignItems:'center',gap:7}}>
                       <span style={{fontSize:14}}>{g.icon}</span>
-                      <span style={{fontSize:11,color:'#cbd5e1'}}>{shortLabel(g)}</span>
+                      <span style={{fontSize:11,color:'#cbd5e1'}}>{g.short}</span>
                     </div>
                     <span style={{fontSize:13,fontWeight:700,color:g.color}}>{cnt.toLocaleString()}명</span>
                   </div>
@@ -417,7 +615,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
               const pct=(cnt/grandTotal)*100;
               if(!pct) return null;
               return(
-                <div key={g.id} title={`${shortLabel(g)}: ${pct.toFixed(1)}%`}
+                <div key={g.id} title={`${g.short}: ${pct.toFixed(1)}%`}
                   style={{width:`${pct}%`,background:g.color,transition:'width 0.5s',minWidth:pct>0.5?2:0}}/>
               );
             })}
@@ -430,7 +628,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
               return(
                 <div key={g.id} style={{display:'flex',alignItems:'center',gap:5}}>
                   <div style={{width:8,height:8,borderRadius:'50%',background:g.color,flexShrink:0}}/>
-                  <span style={{fontSize:10,color:'#64748b'}}>{shortLabel(g)} {pct}%</span>
+                  <span style={{fontSize:10,color:'#64748b'}}>{g.short} {pct}%</span>
                 </div>
               );
             })}
@@ -718,7 +916,7 @@ function PromptTab({ customers, groupCounts, templates, prompts, setPrompts, pro
                 <div key={g.id} onClick={()=>setSelGroup(g)}
                   style={{display:'flex',alignItems:'center',gap:8,padding:'8px 16px',cursor:'pointer',background:isSel?`${g.color}18`:'transparent',borderLeft:isSel?`3px solid ${g.color}`:'3px solid transparent'}}>
                   <span style={{fontSize:15}}>{g.icon}</span>
-                  <div style={{flex:1}}><div style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?g.color:'#94a3b8'}}>{shortLabel(g)}</div></div>
+                  <div style={{flex:1}}><div style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?g.color:'#94a3b8'}}>{g.short}</div></div>
                   <span style={{fontSize:10,color:'#475569'}}>{groupCounts[g.id]||0}명</span>
                 </div>
               );
