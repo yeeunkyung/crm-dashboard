@@ -303,7 +303,24 @@ async function sendSMS(to, text) {
     body: JSON.stringify({ message: { to: to.replace(/-/g, ''), from: sender, text } }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.errorMessage || data.message || '발송 실패');
+
+  // HTTP 에러 (인증 실패, 서버 오류 등)
+  if (!res.ok) throw new Error(data.errorMessage || data.message || `HTTP ${res.status}`);
+
+  // Solapi는 200 OK 이면서도 failedMessageList에 실패를 담아 반환함
+  const failed = data.failedMessageList;
+  if (failed && failed.length > 0) {
+    const reason = failed[0]?.errorCode
+      ? `${failed[0].errorCode}: ${failed[0].errorMessage || '발송 실패'}`
+      : (failed[0]?.errorMessage || '발송 실패');
+    throw new Error(reason);
+  }
+
+  // 성공 메시지가 0건인 경우
+  if (data.groupInfo?.count?.total === 0) {
+    throw new Error('발송된 메시지 없음 (수신번호 오류 가능성)');
+  }
+
   return data;
 }
 
