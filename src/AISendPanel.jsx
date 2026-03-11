@@ -690,29 +690,41 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
     if (selectedCustomers.length === 0) { alert('고객을 선택해주세요'); return; }
     setSending(true); setSendDone(false); setSendLog([]);
 
-    const addLog = (msg, color) => setSendLog(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, color }]);
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
+    const timeStr = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
+    const fullDatetime = `${dateStr} ${timeStr}`;
+
+    const addLog = (msg, color) => setSendLog(prev => [...prev, { time: timeStr, msg, color }]);
     addLog(`🚀 발송 시작 — ${selectedCustomers.length}명`, '#a5b4fc');
 
     for (const c of selectedCustomers) {
       const g = getGroup(c.groupId);
       const msgToSend = applyAdPrefix(finalMsg, localIsAd);
+      let success = false;
+      let noPhone = false;
+      let errorMsg = '';
       try {
         if (c.phone && c.phone.length >= 10) {
           await sendSMS(c.phone, msgToSend);
+          success = true;
           addLog(`✅ ${c.name} (${c.phone}) 발송 성공`, '#10b981');
         } else {
-          addLog(`📋 ${c.name} 발송내역 저장 (번호 없음)`, '#f59e0b');
+          noPhone = true;
+          addLog(`📋 ${c.name} 내역 저장 (번호 없음)`, '#f59e0b');
         }
-        setSent(prev => [{
-          customer: c, message: msgToSend, group: g,
-          apt: apt.name, time: new Date().toLocaleTimeString(),
-          label: msgSource === 'template' ? (selTemplate?.title || '템플릿') : 'AI 자동생성',
-          simulated: !c.phone || c.phone.length < 10,
-        }, ...prev]);
       } catch (e) {
+        errorMsg = e.message;
         addLog(`❌ ${c.name} 실패: ${e.message}`, '#f87171');
       }
-      // 0.3초 딜레이
+      setSent(prev => [{
+        customer: c, message: msgToSend, group: g,
+        apt: apt.name,
+        date: dateStr, time: timeStr, datetime: fullDatetime,
+        label: msgSource === 'template' ? (selTemplate?.title || '템플릿') : 'AI 자동생성',
+        status: noPhone ? 'noPhone' : success ? 'success' : 'fail',
+        errorMsg,
+      }, ...prev]);
       await new Promise(r => setTimeout(r, 300));
     }
 
@@ -757,11 +769,25 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
             </div>
           </div>
 
-          {/* 아파트 정보 */}
+          {/* 아파트 정보 + 발신번호 */}
           <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 12, padding: '12px 14px', fontSize: 11 }}>
             <div style={{ color: '#a5b4fc', fontWeight: 700, marginBottom: 6 }}>📌 {apt.name}</div>
             <div style={{ color: '#64748b' }}>{apt.date} · {apt.price}</div>
-            <div style={{ color: '#475569', marginTop: 2 }}>{apt.location}</div>
+            <div style={{ color: '#475569', marginTop: 2, marginBottom: 10 }}>{apt.location}</div>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
+              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>📞 발신번호</div>
+              <div style={{
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 7, padding: '6px 10px', fontSize: 11,
+                color: import.meta.env.VITE_SOLAPI_SENDER ? '#10b981' : '#f87171',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <span>{import.meta.env.VITE_SOLAPI_SENDER ? '✅' : '⚠️'}</span>
+                <span style={{ fontWeight: 600 }}>
+                  {import.meta.env.VITE_SOLAPI_SENDER || '미설정 — Vercel 환경변수 확인 필요'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
