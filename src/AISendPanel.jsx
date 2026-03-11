@@ -334,6 +334,23 @@ async function checkSMSStatus(messageId) {
   return null; // 10초 내 확정 안 됨
 }
 
+// ── 수신거부 목록 조회 ────────────────────────────────
+async function fetchUnsubscribers() {
+  try {
+    const { apiKey, date, salt, signature } = await makeSolapiAuth();
+    // Solapi 수신거부 조회 API
+    const res = await fetch('https://api.solapi.com/messages/v4/unsubscribers?limit=1000', {
+      headers: { 'Authorization': `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}` },
+    });
+    const data = await res.json();
+    // phoneNumber 배열 반환 (하이픈 제거 정규화)
+    const list = data.unsubscriberList || data.data || [];
+    return list.map(u => (u.phoneNumber || u.phone || '').replace(/-/g, ''));
+  } catch {
+    return [];
+  }
+}
+
 // ── AI 메시지 생성 ────────────────────────────────────
 async function generateAIMessage(customer, apt, prompts) {
   const g = getGroup(customer.groupId);
@@ -686,6 +703,23 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
   const [promptSaveStatus, setPromptSaveStatus] = useState('saved');
   const [localIsAd, setLocalIsAd] = useState(isAd); // 광고 표기 — 발송 실행 영역에서 관리
 
+  // 수신거부
+  const [unsubList, setUnsubList] = useState([]); // 수신거부 번호 목록
+  const [unsubLoading, setUnsubLoading] = useState(false);
+  const [unsubLastFetched, setUnsubLastFetched] = useState(null);
+
+  const isUnsubscribed = (phone) => phone && unsubList.includes(phone.replace(/-/g, ''));
+  const unsubCustomers = selectedCustomers.filter(c => isUnsubscribed(c.phone));
+  const validCustomers = selectedCustomers.filter(c => !isUnsubscribed(c.phone));
+
+  const handleFetchUnsub = async () => {
+    setUnsubLoading(true);
+    const list = await fetchUnsubscribers();
+    setUnsubList(list);
+    setUnsubLastFetched(new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}));
+    setUnsubLoading(false);
+  };
+
   const logRef = useRef(null);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [sendLog]);
 
@@ -725,7 +759,20 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
     const addLog = (msg, color) => setSendLog(prev => [...prev, { time: timeStr, msg, color }]);
     addLog(`🚀 발송 시작 — ${selectedCustomers.length}명`, '#a5b4fc');
 
-    for (const c of selectedCustomers) {
+    // 수신거부 고객 먼저 처리
+    for (const c of selectedCustomers.filter(c => isUnsubscribed(c.phone))) {
+      const g = getGroup(c.groupId);
+      const msgToSend = applyAdPrefix(finalMsg, localIsAd);
+      addLog(`🚫 ${c.name} (${c.phone}) — 수신거부 고객, 발송 제외`, '#f87171');
+      setSent(prev => [{
+        customer: c, message: msgToSend, group: g,
+        apt: apt.name, date: dateStr, time: timeStr, datetime: fullDatetime,
+        label: msgSource === 'template' ? (selTemplate?.title || '템플릿') : 'AI 자동생성',
+        status: 'unsubscribed', errorMsg: '수신거부 등록 고객', messageId: null,
+      }, ...prev]);
+    }
+
+    for (const c of selectedCustomers.filter(c => !isUnsubscribed(c.phone))) {
       const g = getGroup(c.groupId);
       const msgToSend = applyAdPrefix(finalMsg, localIsAd);
       let status = 'noPhone';
@@ -835,6 +882,55 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* 수신거부 확인 */}
+          <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 12, padding: '12px 14px', fontSize: 11 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ color: '#f87171', fontWeight: 700 }}>🚫 수신거부 확인</div>
+              {unsubLastFetched && (
+                <div style={{ fontSize: 10, color: '#475569' }}>마지막 조회 {unsubLastFetched}</div>
+              )}
+            </div>
+
+            <button onClick={handleFetchUnsub} disabled={unsubLoading}
+              style={{ width: '100%', padding: '7px', borderRadius: 8, border: 'none', cursor: unsubLoading ? 'not-allowed' : 'pointer',
+                fontSize: 11, fontWeight: 600, marginBottom: 8,
+                background: unsubLoading ? 'rgba(255,255,255,0.05)' : 'rgba(248,113,113,0.15)',
+                color: unsubLoading ? '#475569' : '#f87171' }}>
+              {unsubLoading ? '⏳ 조회 중...' : `🔄 수신거부 목록 불러오기`}
+            </button>
+
+            {unsubList.length > 0 && (
+              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6 }}>
+                전체 수신거부 <span style={{ color: '#f87171', fontWeight: 700 }}>{unsubList.length}명</span> 등록됨
+              </div>
+            )}
+
+            {/* 선택된 고객 중 수신거부 있을 때 경고 */}
+            {unsubCustomers.length > 0 && (
+              <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontSize: 11, color: '#f87171', fontWeight: 700, marginBottom: 5 }}>
+                  ⚠️ 선택된 고객 중 수신거부 {unsubCustomers.length}명 — 발송 자동 제외됩니다
+                </div>
+                {unsubCustomers.slice(0, 5).map(c => (
+                  <div key={c.id} style={{ fontSize: 10, color: '#f87171', marginTop: 2 }}>
+                    · {c.name} ({c.phone})
+                  </div>
+                ))}
+                {unsubCustomers.length > 5 && (
+                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>외 {unsubCustomers.length - 5}명</div>
+                )}
+              </div>
+            )}
+
+            {unsubList.length > 0 && unsubCustomers.length === 0 && selectedCustomers.length > 0 && (
+              <div style={{ fontSize: 10, color: '#10b981' }}>✅ 선택된 고객 중 수신거부 없음</div>
+            )}
+
+            {!unsubLastFetched && (
+              <div style={{ fontSize: 10, color: '#475569' }}>발송 전 반드시 조회해주세요</div>
+            )}
           </div>
         </div>
 
