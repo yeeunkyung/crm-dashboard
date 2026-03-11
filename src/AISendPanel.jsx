@@ -708,6 +708,8 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
   const [unsubLoading, setUnsubLoading] = useState(false);
   const [unsubLastFetched, setUnsubLastFetched] = useState(null);
 
+  const selectedCustomers = customers.filter(c => selectedIds.includes(c.id));
+
   const isUnsubscribed = (phone) => phone && unsubList.includes(phone.replace(/-/g, ''));
   const unsubCustomers = selectedCustomers.filter(c => isUnsubscribed(c.phone));
   const validCustomers = selectedCustomers.filter(c => !isUnsubscribed(c.phone));
@@ -722,8 +724,6 @@ export default function AISendPanel({ customers, templates, apt, prompts, setPro
 
   const logRef = useRef(null);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [sendLog]);
-
-  const selectedCustomers = customers.filter(c => selectedIds.includes(c.id));
 
   // 템플릿 선택 시 editMsg 동기화
   const handleSelectTemplate = t => {
