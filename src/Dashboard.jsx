@@ -228,17 +228,71 @@ function CustomerAddForm({ customers, setCustomers }) {
   );
 }
 
-export default function Dashboard({ customers, setCustomers, templates, apt, setApt, prompts, setPrompts, tab, setTab, setSelected, setSendMode, groupCounts, totalCount, promptSaveStatus, setPromptSaveStatus, tmplSource, setTmplSource, setTemplates }) {
+export default function Dashboard({ customers, setCustomers, templates, apt, setApt, prompts, setPrompts, tab, setTab, setSelected, setSendMode, groupCounts, totalCount, promptSaveStatus, setPromptSaveStatus, tmplSource, setTmplSource, setTemplates, lsSheetUrlKey }) {
   const [dataSource, setDataSource] = useState('sample');
   const [csvStatus, setCsvStatus] = useState('idle');
   const [csvError, setCsvError] = useState('');
   const [csvFileName, setCsvFileName] = useState('');
-  const [sheetUrl, setSheetUrl] = useState('');
+  const [sheetUrl, setSheetUrlState] = useState(() => {
+    try { return lsSheetUrlKey ? (localStorage.getItem(lsSheetUrlKey) || '') : ''; } catch { return ''; }
+  });
+  const setSheetUrl = (v) => {
+    setSheetUrlState(v);
+    try { if (lsSheetUrlKey) localStorage.setItem(lsSheetUrlKey, v); } catch {}
+  };
   const [sheetLoading, setSheetLoading] = useState(false);
   const [sheetStatus, setSheetStatus] = useState('idle');
   const [sheetError, setSheetError] = useState('');
   const [filterGroup, setFilterGroup] = useState(null);
   const [showColGuide, setShowColGuide] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [customerSearch, setCustomerSearch] = useState('');
+
+  const AGE_OPTS = ['20대','30대','40대','50대','60대 이상'];
+  const GENDER_OPTS = ['남자','여자'];
+  const 자격_OPTS = ['1순위','특별공급','2순위','무순위'];
+  const 목적_OPTS = ['실거주','실거주+투자','투자','증여','기타'];
+  const 의사_OPTS = ['있다','없다','조건부'];
+  const MARKETING_OPTS = ['동의','거부'];
+
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setEditForm({ ...c });
+  };
+  const cancelEdit = () => { setEditingId(null); setEditForm({}); };
+  const saveEdit = () => {
+    // 그룹 재계산
+    const 의사 = (editForm.의사||'').trim();
+    const 자격 = (editForm.자격||'').trim();
+    const 목적 = (editForm.목적||'').trim();
+    const 나이 = (editForm.age||'').trim();
+    const 분양 = (editForm.분양||'').trim();
+    let newGroupId = editForm.groupId;
+    if(의사==='없다') newGroupId = (분양.includes('모른')||분양.includes('몰랐'))?1:2;
+    else if(의사==='있다'){
+      if(자격.includes('1순위')) newGroupId=3;
+      else if(자격.includes('특별공급')) newGroupId=4;
+      else if(자격.includes('2순위')) newGroupId=5;
+      else newGroupId=6;
+    } else if(목적.includes('투자')||목적.includes('증여')) newGroupId=9;
+    else if(목적.includes('기타')) newGroupId=10;
+    else newGroupId=['20대','30대','40대'].includes(나이)?7:8;
+    setCustomers(prev => prev.map(c => c.id===editingId ? {...editForm, groupId:newGroupId, phone:(editForm.phone||'').replace(/-/g,'')} : c));
+    setEditingId(null); setEditForm({});
+  };
+  const editChips = (key, opts, color='#6366f1') => (
+    <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:3}}>
+      {opts.map(o=>(
+        <button key={o} onClick={()=>setEditForm(f=>({...f,[key]:o}))}
+          style={{padding:'2px 8px',borderRadius:12,border:`1px solid ${editForm[key]===o?color:'rgba(255,255,255,0.1)'}`,
+            background:editForm[key]===o?`${color}25`:'rgba(255,255,255,0.03)',
+            color:editForm[key]===o?color:'#64748b',fontSize:10,cursor:'pointer'}}>
+          {o}
+        </button>
+      ))}
+    </div>
+  );
   const [tmplSheetUrl, setTmplSheetUrl] = useState('');
   const [tmplSheetLoading, setTmplSheetLoading] = useState(false);
   const [tmplSheetError, setTmplSheetError] = useState('');
@@ -246,7 +300,11 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
   const fileRef = useRef();
   const tmplFileRef = useRef();
 
-  const filteredCustomers = filterGroup ? customers.filter(c=>c.groupId===filterGroup) : customers;
+  const filteredCustomers = customers.filter(c => {
+    if(filterGroup && c.groupId !== filterGroup) return false;
+    if(customerSearch && !c.name.includes(customerSearch) && !(c.phone||'').includes(customerSearch)) return false;
+    return true;
+  });
   const normalizeHeader = h => h.trim().replace(/"/g,'').replace(/^\uFEFF/,'').replace(/^\*/,'');
   const checkCols = headers => REQUIRED_COLS.filter(c=>!headers.map(normalizeHeader).includes(c));
 
@@ -275,7 +333,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
       const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
       if(!match) throw new Error('잘못된 시트 URL 형식');
       if(!GSHEET_API_KEY) throw new Error('VITE_GSHEET_API_KEY 환경변수를 설정해주세요.');
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${match[1]}/values/A1:Z1000?key=${GSHEET_API_KEY}`);
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${match[1]}/values/A1:Z10000?key=${GSHEET_API_KEY}`);
       const data = await res.json();
       if(data.error) throw new Error(data.error.message);
       if(!data.values||data.values.length<2) throw new Error('시트에 데이터가 없습니다.');
@@ -299,6 +357,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
         };
       }).filter(c=>c.name);
       setCustomers(rows); setDataSource('sheet'); setSheetStatus('done');
+      // sheetUrl은 이미 setState 시 localStorage에 저장됨
     } catch(e){ setSheetError(e.message); setSheetStatus('error'); }
     setSheetLoading(false);
   };
@@ -513,7 +572,7 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
 
         {/* 고객 목록 */}
         <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'14px 16px'}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
             <div style={{fontSize:12,fontWeight:700,color:'#94a3b8'}}>
               👥 고객 목록
               <span style={{marginLeft:8,fontSize:11,color:'#6366f1',fontWeight:600}}>{customers.length.toLocaleString()}명</span>
@@ -526,36 +585,98 @@ export default function Dashboard({ customers, setCustomers, templates, apt, set
               </button>
             )}
           </div>
-          <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:600,overflowY:'auto'}}>
-            {filteredCustomers.slice(0,200).map(c=>{
+          {/* 검색창 */}
+          <input
+            value={customerSearch}
+            onChange={e=>setCustomerSearch(e.target.value)}
+            placeholder="🔍 이름 또는 연락처로 검색..."
+            style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:'7px 12px',color:'#e2e8f0',fontSize:11,outline:'none',marginBottom:10,boxSizing:'border-box'}}
+          />
+          <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:580,overflowY:'auto'}}>
+            {filteredCustomers.slice(0,500).map(c=>{
               const g=ALL_GROUPS.find(x=>x.id===c.groupId)||{name:'미분류',color:'#64748b',icon:'❓',short:'미분류'};
+              const isEditing = editingId === c.id;
               return(
                 <div key={c.id}
-                  style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:9,padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:9,flex:1,minWidth:0}}>
-                    <div style={{width:28,height:28,borderRadius:7,background:`${g.color}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{g.icon}</div>
-                    <div style={{minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                        <span style={{fontWeight:600,fontSize:12}}>{c.name}</span>
-                        <span style={{fontSize:9,color:g.color,background:`${g.color}15`,padding:'1px 6px',borderRadius:10}}>{g.short}</span>
-                        {c.marketing&&<span style={{fontSize:9,color:c.marketing.includes('동의')?'#10b981':'#64748b',background:'rgba(255,255,255,0.05)',padding:'1px 6px',borderRadius:10}}>{c.marketing.includes('동의')?'📧동의':'📵거부'}</span>}
+                  style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${isEditing?'rgba(99,102,241,0.4)':'rgba(255,255,255,0.06)'}`,borderRadius:9,padding:'9px 13px'}}>
+                  {isEditing ? (
+                    // ── 수정 모드 ──
+                    <div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                        <div>
+                          <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>이름</div>
+                          <input value={editForm.name||''} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))}
+                            style={{width:'100%',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'5px 8px',color:'#e2e8f0',fontSize:11,outline:'none'}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>연락처</div>
+                          <input value={editForm.phone||''} onChange={e=>setEditForm(f=>({...f,phone:e.target.value}))}
+                            style={{width:'100%',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'5px 8px',color:'#e2e8f0',fontSize:11,outline:'none'}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>거주지역</div>
+                          <input value={editForm.region||''} onChange={e=>setEditForm(f=>({...f,region:e.target.value}))}
+                            style={{width:'100%',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'5px 8px',color:'#e2e8f0',fontSize:11,outline:'none'}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>메모</div>
+                          <input value={editForm.memo||''} onChange={e=>setEditForm(f=>({...f,memo:e.target.value}))}
+                            style={{width:'100%',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'5px 8px',color:'#e2e8f0',fontSize:11,outline:'none'}}/>
+                        </div>
                       </div>
-                      <div style={{fontSize:10,color:'#64748b',marginTop:1}}>{c.age} · {c.gender} · {c.region}</div>
-                      <div style={{fontSize:10,color:'#475569',marginTop:1}}>{c.자격||'-'} · {c.목적||'-'} · {c.phone?'📱 '+c.phone.replace(/(\d{3})(\d{4})(\d{4})/,'$1-$2-$3'):'번호없음'}</div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                        <div><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>나이</div>{editChips('age',AGE_OPTS,'#f87171')}</div>
+                        <div><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>성별</div>{editChips('gender',GENDER_OPTS)}</div>
+                        <div><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>청약의사</div>{editChips('의사',의사_OPTS,'#6366f1')}</div>
+                        <div><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>청약자격</div>{editChips('자격',자격_OPTS,'#a855f7')}</div>
+                        <div><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>구매목적</div>{editChips('목적',목적_OPTS,'#f59e0b')}</div>
+                        <div><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>마케팅동의</div>{editChips('marketing',MARKETING_OPTS,'#06b6d4')}</div>
+                      </div>
+                      <div style={{display:'flex',gap:6,marginTop:6}}>
+                        <button onClick={saveEdit}
+                          style={{flex:1,padding:'6px',borderRadius:7,border:'none',cursor:'pointer',fontSize:11,fontWeight:700,background:'linear-gradient(135deg,#6366f1,#a855f7)',color:'white'}}>
+                          ✅ 저장
+                        </button>
+                        <button onClick={cancelEdit}
+                          style={{padding:'6px 12px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',cursor:'pointer',fontSize:11,background:'none',color:'#64748b'}}>
+                          취소
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  {c.id!==99&&(
-                    <button
-                      onClick={()=>setCustomers(prev=>prev.filter(x=>x.id!==c.id))}
-                      style={{background:'none',border:'1px solid rgba(248,113,113,0.25)',color:'#f87171',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,flexShrink:0,marginLeft:8}}>
-                      삭제
-                    </button>
+                  ) : (
+                    // ── 보기 모드 ──
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:9,flex:1,minWidth:0}}>
+                        <div style={{width:28,height:28,borderRadius:7,background:`${g.color}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{g.icon}</div>
+                        <div style={{minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontWeight:600,fontSize:12}}>{c.name}</span>
+                            <span style={{fontSize:9,color:g.color,background:`${g.color}15`,padding:'1px 6px',borderRadius:10}}>{g.short}</span>
+                            {c.marketing&&<span style={{fontSize:9,color:c.marketing.includes('동의')?'#10b981':'#64748b',background:'rgba(255,255,255,0.05)',padding:'1px 6px',borderRadius:10}}>{c.marketing.includes('동의')?'📧동의':'📵거부'}</span>}
+                          </div>
+                          <div style={{fontSize:10,color:'#64748b',marginTop:1}}>{c.age} · {c.gender} · {c.region}</div>
+                          <div style={{fontSize:10,color:'#475569',marginTop:1}}>{c.자격||'-'} · {c.목적||'-'} · {c.phone?'📱 '+c.phone.replace(/(\d{3})(\d{4})(\d{4})/,'$1-$2-$3'):'번호없음'}</div>
+                        </div>
+                      </div>
+                      {c.id!==99&&(
+                        <div style={{display:'flex',gap:5,marginLeft:8,flexShrink:0}}>
+                          <button onClick={()=>startEdit(c)}
+                            style={{background:'none',border:'1px solid rgba(99,102,241,0.3)',color:'#a5b4fc',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10}}>
+                            수정
+                          </button>
+                          <button onClick={()=>setCustomers(prev=>prev.filter(x=>x.id!==c.id))}
+                            style={{background:'none',border:'1px solid rgba(248,113,113,0.25)',color:'#f87171',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10}}>
+                            삭제
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );
             })}
-            {filteredCustomers.length>200&&(
-              <div style={{textAlign:'center',color:'#475569',fontSize:11,padding:'8px'}}>+{filteredCustomers.length-200}명 더 있음</div>
+            {filteredCustomers.length>500&&(
+              <div style={{textAlign:'center',color:'#475569',fontSize:11,padding:'8px'}}>+{filteredCustomers.length-500}명 더 있음 (스크롤로 확인)</div>
             )}
             {filteredCustomers.length===0&&(
               <div style={{textAlign:'center',color:'#334155',fontSize:12,padding:'40px'}}>고객 데이터가 없습니다</div>
