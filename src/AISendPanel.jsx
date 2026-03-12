@@ -435,9 +435,70 @@ function SegmentSelector({ customers, selectedIds, onChange }) {
   };
 
   const [expandedGroup, setExpandedGroup] = useState(null);
+  const [nameSearch, setNameSearch] = useState('');
+
+  // 이름 검색 결과
+  const searchResults = nameSearch.trim()
+    ? customers.filter(c =>
+        c.name.includes(nameSearch) ||
+        (c.phone || '').includes(nameSearch)
+      )
+    : [];
 
   return (
     <div>
+      {/* 이름 검색 */}
+      <div style={{ marginBottom: 10 }}>
+        <input
+          value={nameSearch}
+          onChange={e => setNameSearch(e.target.value)}
+          placeholder="🔍 이름 또는 연락처로 검색..."
+          style={{
+            width: '100%', background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+            padding: '7px 12px', color: '#e2e8f0', fontSize: 11, outline: 'none',
+          }}
+        />
+        {nameSearch.trim() && (
+          <div style={{ marginTop: 6 }}>
+            {searchResults.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#475569', padding: '8px 4px' }}>검색 결과 없음</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto' }}>
+                {searchResults.map(c => {
+                  const g = getGroup(c.groupId);
+                  const isSel = selectedIds.includes(c.id);
+                  return (
+                    <div key={c.id} onClick={() => toggleOne(c.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                        background: isSel ? `${g.color}18` : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${isSel ? `${g.color}50` : 'rgba(255,255,255,0.08)'}`,
+                        borderRadius: 8, cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{
+                        width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                        background: isSel ? g.color : 'rgba(255,255,255,0.06)',
+                        border: `2px solid ${isSel ? g.color : '#475569'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {isSel && <span style={{ color: 'white', fontSize: 8 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: isSel ? g.color : '#e2e8f0' }}>{c.name}</span>
+                      <span style={{ fontSize: 10, color: g.color, background: `${g.color}15`, padding: '1px 6px', borderRadius: 10 }}>{g.short}</span>
+                      <span style={{ fontSize: 10, color: '#475569', marginLeft: 'auto' }}>
+                        {c.phone ? c.phone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : '번호없음'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />
+          </div>
+        )}
+      </div>
       {/* 전체 선택 */}
       <div
         onClick={toggleAll}
